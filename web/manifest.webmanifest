@@ -1,0 +1,11 @@
+{
+  "name": "Runway Rally",
+  "short_name": "Runway Rally",
+  "description": "Design fashion. Earn it with math.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff4fb",
+  "theme_color": "#6a4cff",
+  "icons": [{ "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

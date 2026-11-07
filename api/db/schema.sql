@@ -1,0 +1,30 @@
+-- Pilot schema. Student state is stored as one JSONB document per student, which keeps the
+-- pilot simple. Split into relational tables once the shape of the data settles.
+-- No real names, emails or locations are collected: only a class code and a nickname.
+
+CREATE TABLE IF NOT EXISTS students (
+  id          uuid PRIMARY KEY,
+  class_code  text NOT NULL,
+  token_hash  text NOT NULL UNIQUE,
+  data        jsonb NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS students_class_idx ON students (class_code);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id          uuid PRIMARY KEY,
+  student_id  uuid NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+  data        jsonb NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS tasks_student_idx ON tasks (student_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS events (
+  id          bigserial PRIMARY KEY,
+  student_id  uuid NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+  type        text NOT NULL,
+  payload     jsonb NOT NULL DEFAULT '{}',
+  at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS events_student_idx ON events (student_id, at DESC);

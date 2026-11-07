@@ -1,0 +1,54 @@
+# Pilot stack for one droplet: Caddy (automatic HTTPS) -> API (also serves the web client) -> Postgres.
+#
+# Bundled database:   docker compose --profile localdb up -d --build
+# Managed database:   set DATABASE_URL (and PGSSLMODE=require) in .env, then: docker compose up -d --build
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      TRUST_PROXY: "1"
+    expose:
+      - "3000"
+
+  db:
+    profiles: ["localdb"]
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rally
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-unused}
+      POSTGRES_DB: rally
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rally -d rally"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    # not published to the host: only the api container can reach it
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
