@@ -1,6 +1,25 @@
 // Teacher console. Reads /api/admin/class/:code with the admin token (kept in sessionStorage only).
 const root = document.getElementById('admin');
 
+// A Brightspace launch hands over a signed teacher session in the URL fragment; it is scoped to that one course.
+const fromLti = /^#lti=([A-Za-z0-9_.-]{20,2000})$/.exec(location.hash);
+if (fromLti) {
+  try {
+    sessionStorage.setItem('rr_lti', fromLti[1]);
+  } catch {
+    /* memory only */
+  }
+  history.replaceState(null, '', location.pathname);
+}
+let ltiSession = fromLti ? fromLti[1] : (() => {
+  try {
+    return sessionStorage.getItem('rr_lti') || '';
+  } catch {
+    return '';
+  }
+})();
+const authHeaders = () => (ltiSession ? { 'x-lti-session': ltiSession } : { 'x-admin-token': state.token });
+
 const state = {
   code: sessionStorage.getItem('rr_code') || '',
   token: sessionStorage.getItem('rr_admin') || '',
@@ -33,7 +52,7 @@ function show(...nodes) {
 }
 
 async function fetchClass() {
-  const res = await fetch(`/api/admin/class/${encodeURIComponent(state.code)}`, { headers: { 'x-admin-token': state.token } });
+  const res = await fetch(`/api/admin/class/${encodeURIComponent(state.code)}`, { headers: authHeaders() });
   let body = {};
   try {
     body = await res.json();
@@ -41,7 +60,7 @@ async function fetchClass() {
     /* ignore */
   }
   if (!res.ok) {
-    const msg = res.status === 403 ? 'That admin token is not right.' : res.status === 503 ? 'Admin access is not set up on the server yet (ADMIN_TOKEN).' : body.error || 'Could not load the class.';
+    const msg = ltiSession && res.status === 401 ? 'Your session expired. Open Runway Rally again from your course in Brightspace.' : res.status === 403 ? 'That admin token is not right.' : res.status === 503 ? 'Admin access is not set up on the server yet (ADMIN_TOKEN).' : body.error || 'Could not load the class.';
     throw new Error(msg);
   }
   return body;
@@ -116,7 +135,8 @@ function exportCsv() {
 }
 
 function dashboard() {
-  const { students, skills, classCode } = state.data;
+  const { students, skills, classCode, title, roster } = state.data;
+  const rosterLine = roster && !roster.error ? `${roster.launched} of ${roster.enrolled} enrolled students have opened Runway Rally${roster.notLaunched ? ` · ${roster.notLaunched} have not yet` : ''}` : roster?.error ? 'Course roster is unavailable right now' : '';
   const ids = Object.keys(skills);
   const started = students.filter((s) => s.answered > 0);
   const accs = started.map((s) => s.accuracy).filter((a) => a !== null);
@@ -166,7 +186,7 @@ function dashboard() {
   );
 
   show(
-    h('div', { class: 'head' }, h('div', {}, h('h1', { text: `Class ${classCode}` }), h('p', { class: 'stamp', text: `Updated ${state.fetchedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · refreshes every 30 seconds` })), h('div', { class: 'actions' }, refresh, csv, out)),
+    h('div', { class: 'head' }, h('div', {}, h('h1', { text: title ? title : `Class ${classCode}` }), rosterLine ? h('p', { class: 'stamp', text: rosterLine }) : null, h('p', { class: 'stamp', text: `Updated ${state.fetchedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · refreshes every 30 seconds` })), h('div', { class: 'actions' }, refresh, csv, out)),
     h(
       'div',
       { class: 'stats' },
@@ -190,7 +210,7 @@ function dashboard() {
       'section',
       { class: 'panel', 'aria-labelledby': 'm-h' },
       h('div', { class: 'toolbar' }, h('h2', { id: 'm-h', text: 'Mastery by skill' }), sort),
-      students.length ? h('div', { class: 'tablewrap' }, table) : h('p', { class: 'empty', text: `No students have joined ${classCode} yet. Share the class code with your class.` }),
+      students.length ? h('div', { class: 'tablewrap' }, table) : h('p', { class: 'empty', text: title ? 'No students have opened Runway Rally yet. They launch it from your Brightspace course.' : `No students have joined ${classCode} yet. Share the class code with your class.` }),
       h('div', { class: 'legend' }, h('span', { class: 'l1', text: 'Below 35%' }), h('span', { class: 'l2', text: '35% to 59%' }), h('span', { class: 'l3', text: '60% and up' }), h('span', { text: 'Percentages are shown in every cell, not just color' })),
     ),
   );
@@ -212,13 +232,36 @@ async function reload(quiet = false) {
 }
 
 function signOut() {
+  if (ltiSession) {
+    try {
+      sessionStorage.removeItem('rr_lti');
+    } catch {
+      /* ignore */
+    }
+    ltiSession = '';
+    state.data = null;
+    return show(h('div', { class: 'card' }, h('p', { text: 'Signed out. Open Runway Rally again from your course in Brightspace.' })));
+  }
   sessionStorage.removeItem('rr_admin');
   state.token = '';
   state.data = null;
   loginScreen();
 }
 
-if (state.code && state.token) {
+if (ltiSession) {
+  fetch('/api/admin/me', { headers: authHeaders() })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Your session expired. Open Runway Rally again from your course in Brightspace.'))))
+    .then((me) => {
+      state.code = me.classCode;
+      return fetchClass();
+    })
+    .then((d) => {
+      state.data = d;
+      state.fetchedAt = new Date();
+      dashboard();
+    })
+    .catch((e) => show(h('div', { class: 'card' }, h('p', { text: e.message }))));
+} else if (state.code && state.token) {
   fetchClass()
     .then((d) => {
       state.data = d;

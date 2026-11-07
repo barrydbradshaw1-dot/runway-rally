@@ -2,8 +2,43 @@
 const app = document.getElementById('app');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// Inside a Brightspace iframe some browsers block storage, so fall back to memory for that visit.
+const mem = {};
+const store = {
+  get(k) {
+    try {
+      return localStorage.getItem(k) ?? mem[k] ?? null;
+    } catch {
+      return mem[k] ?? null;
+    }
+  },
+  set(k, v) {
+    mem[k] = v;
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* memory only */
+    }
+  },
+  del(k) {
+    delete mem[k];
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
+// Brightspace launches hand the session over in the URL fragment (never sent to a server or logged).
+const launched = /^#lti=([A-Za-z0-9_-]{20,64})$/.exec(location.hash);
+if (launched) {
+  store.set('rr_token', launched[1]);
+  history.replaceState(null, '', location.pathname);
+}
+
 const state = {
-  token: localStorage.getItem('rr_token'),
+  token: store.get('rr_token'),
   student: null,
   catalog: null,
   task: null,
@@ -68,8 +103,10 @@ async function api(path, { method = 'GET', body } = {}) {
 }
 
 function signOut() {
-  localStorage.removeItem('rr_token');
+  store.del('rr_token');
+  const viaLti = state.student?.viaLti;
   Object.assign(state, { token: null, student: null, task: null, hint: null, input: '' });
+  if (viaLti) return show(h('div', { class: 'card stack' }, h('h2', { text: 'Session ended' }), h('p', { text: 'Open Runway Rally again from your course in Brightspace.' })));
   loginScreen();
 }
 
@@ -131,7 +168,7 @@ function loginScreen(msg = '') {
         try {
           const r = await api('/api/session', { method: 'POST', body: { classCode: code.value, nickname: nick.value } });
           state.token = r.token;
-          localStorage.setItem('rr_token', r.token);
+          store.set('rr_token', r.token);
           await homeScreen();
         } catch (ex) {
           err.textContent = ex.message;
@@ -198,7 +235,7 @@ async function homeScreen() {
       tile('🃏', 'Cards', () => open('cards', cardsScreen)),
     ),
     h('div', { class: 'card stack' }, h('h3', { text: 'Your skills' }), skillBars(st)),
-    h('button', { class: 'ghost', onclick: signOut, text: 'Switch student' }),
+    st.viaLti ? null : h('button', { class: 'ghost', onclick: signOut, text: 'Switch student' }),
   );
 }
 

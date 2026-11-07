@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { makeStore } from './store.js';
 import { mulberry32, THEMES, SKILLS, SKILL_IDS } from './skills.js';
 import { recordInterest } from './adaptive.js';
+import { loadLtiConfig } from './lti/config.js';
+import { createLtiService } from './lti/lti.js';
+import { LtiError } from './lti/jwt.js';
 import {
   ITEMS,
   CARDS,
@@ -63,12 +66,15 @@ class HttpError extends Error {
   }
 }
 
-export function createApp({ store = makeStore(), env = process.env, seed } = {}) {
+export function createApp({ store = makeStore(), env = process.env, seed, fetchImpl, now } = {}) {
   const rng = seed === undefined ? () => Math.random() : mulberry32(seed);
   const webDir = resolve(env.WEB_DIR || fileURLToPath(new URL('../../web', import.meta.url)));
   const production = env.NODE_ENV === 'production';
   const adminToken = env.ADMIN_TOKEN || (production ? null : 'dev-admin');
   const trustProxy = env.TRUST_PROXY === '1';
+  const ltiConfig = loadLtiConfig(env);
+  const lti = createLtiService({ store, config: ltiConfig, fetchImpl, now });
+  const pub = (s) => ({ ...publicStudent(s), viaLti: Boolean(s.lti) });
 
   // --- tiny in-memory rate limiter (per client IP) ---
   const hits = new Map();
@@ -142,11 +148,19 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
     return student;
   }
 
-  function requireAdmin(req) {
+  // Returns { all: true } for the shared admin token, or { classCode, title } for a Brightspace instructor session.
+  function requireTeacher(req) {
+    const sess = req.headers['x-lti-session'];
+    if (sess) {
+      const p = ltiConfig.verifySession(String(sess));
+      if (!p || p.kind !== 'teacher' || !p.classCode) throw new HttpError(401, 'your session expired, open Runway Rally from your course again');
+      return { all: false, classCode: p.classCode, title: p.title };
+    }
     if (!adminToken) throw new HttpError(503, 'admin access is not configured');
     const given = Buffer.from(String(req.headers['x-admin-token'] || ''));
     const want = Buffer.from(adminToken);
     if (given.length !== want.length || !timingSafeEqual(given, want)) throw new HttpError(403, 'forbidden');
+    return { all: true };
   }
 
   async function taskFor(student) {
@@ -170,16 +184,27 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
       const student = newStudent({ id: randomUUID(), classCode, nickname });
       await store.createStudent(student, sha256(token));
       await store.addEvent(student.id, 'session_start');
-      return send(res, 201, { token, student: publicStudent(student) });
+      return send(res, 201, { token, student: pub(student) });
     }
 
     if (method === 'GET' && path.startsWith('/api/admin/class/')) {
       // tighter limit than the general one so the admin token cannot be guessed quickly
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
-      requireAdmin(req);
+      const who = requireTeacher(req);
       const code = cleanClassCode(decodeURIComponent(path.slice('/api/admin/class/'.length)));
       if (!code) throw new HttpError(400, 'bad class code');
-      return send(res, 200, { classCode: code, skills: CATALOG.skills, students: classSummary(await store.listClass(code)) });
+      if (!who.all && who.classCode !== code) throw new HttpError(403, 'forbidden');
+      const list = await store.listClass(code);
+      const cls = await store.getClass(code);
+      const out = { classCode: code, title: cls?.contextTitle || null, skills: CATALOG.skills, students: classSummary(list) };
+      if (cls?.nrpsUrl) out.roster = await lti.rosterSummary(code, list);
+      return send(res, 200, out);
+    }
+
+    if (method === 'GET' && path === '/api/admin/me') {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      const who = requireTeacher(req);
+      return send(res, 200, who.all ? { kind: 'admin' } : { kind: 'teacher', classCode: who.classCode, title: who.title });
     }
 
     // everything below needs a signed-in student
@@ -188,7 +213,7 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
       const student = await store.getStudentByTokenHash(sha256(/Bearer (\S+)/.exec(req.headers.authorization)[1]));
 
       if (method === 'GET' && path === '/api/state') {
-        return send(res, 200, { student: publicStudent(student), catalog: CATALOG });
+        return send(res, 200, { student: pub(student), catalog: CATALOG });
       }
 
       if (method === 'POST' && path === '/api/event') {
@@ -204,7 +229,7 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
         const body = await readJson(req);
         const existing = await taskFor(student);
         if (existing) {
-          return send(res, 200, { resumed: true, task: publicTask(existing, student.commission), student: publicStudent(student) });
+          return send(res, 200, { resumed: true, task: publicTask(existing, student.commission), student: pub(student) });
         }
         if (body.theme !== undefined && !THEMES.includes(body.theme)) throw new HttpError(400, 'unknown theme');
         const { story, repair } = startCommission(student, { theme: body.theme, rng });
@@ -212,7 +237,7 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
         await store.saveTask(task);
         await store.saveStudent(student);
         await store.addEvent(student.id, 'commission_start', { skill: student.commission.skill, theme: student.commission.theme, repair });
-        return send(res, 200, { story, repair, task: publicTask(task, student.commission), student: publicStudent(student) });
+        return send(res, 200, { story, repair, task: publicTask(task, student.commission), student: pub(student) });
       }
 
       if (method === 'POST' && path === '/api/hint') {
@@ -240,6 +265,7 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
           next = publicTask(t, student.commission);
         }
         await store.saveStudent(student);
+        if (result.commissionComplete) lti.schedulePostScore(student);
         await store.addEvent(student.id, 'answer', {
           skill: task.skill,
           level: task.level,
@@ -247,11 +273,57 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
           retry: result.retry,
           hintLevel: task.hintLevel,
         });
-        return send(res, 200, { ...result, next, student: publicStudent(student) });
+        return send(res, 200, { ...result, next, student: pub(student) });
       }
 
       throw new HttpError(404, 'not found');
     });
+  }
+
+  // ---------------- LTI 1.3 ----------------
+  async function readForm(req, max = 64_000) {
+    const chunks = [];
+    let size = 0;
+    for await (const c of req) {
+      size += c.length;
+      if (size > max) throw new LtiError(413, 'The request was too large.');
+      chunks.push(c);
+    }
+    return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
+  }
+
+  const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  function ltiError(res, status, message) {
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Runway Rally</title><link rel="stylesheet" href="/styles.css"></head><body><main class="card"><h1>Runway Rally</h1><p>${esc(message)}</p></main></body></html>`;
+    res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(html);
+  }
+
+  async function ltiRoute(req, res, url) {
+    const path = url.pathname;
+    if (path === '/lti/jwks.json' && req.method === 'GET') {
+      return send(res, 200, lti.jwksDocument(), { 'cache-control': 'public, max-age=300' });
+    }
+    if (path === '/lti/info' && req.method === 'GET') return send(res, 200, lti.info());
+    if (!ltiConfig.enabled) return ltiError(res, 404, 'Brightspace sign-in is not set up on this server.');
+    if (limited('lti:' + clientIp(req), 120)) return ltiError(res, 429, 'Too many launches at once. Try again in a minute.');
+    try {
+      if (path === '/lti/login' && (req.method === 'GET' || req.method === 'POST')) {
+        const params = req.method === 'POST' ? await readForm(req) : Object.fromEntries(url.searchParams);
+        res.writeHead(302, { location: lti.login(params), 'cache-control': 'no-store' });
+        return res.end();
+      }
+      if (path === '/lti/launch' && req.method === 'POST') {
+        const out = await lti.launch(await readForm(req));
+        res.writeHead(303, { location: out.location, 'cache-control': 'no-store' });
+        return res.end();
+      }
+    } catch (err) {
+      if (err instanceof LtiError) return ltiError(res, err.status, err.message);
+      console.error('lti error', err);
+      return ltiError(res, 500, 'Something went wrong opening Runway Rally. Please try again.');
+    }
+    return ltiError(res, 404, 'Not found.');
   }
 
   // ---------------- static files ----------------
@@ -283,16 +355,18 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
     res.end(req.method === 'HEAD' ? undefined : data);
   }
 
+  const frameAncestors = ltiConfig.enabled && ltiConfig.frameAncestors.length ? ltiConfig.frameAncestors.join(' ') : "'none'";
   const server = http.createServer(async (req, res) => {
     res.setHeader('x-content-type-options', 'nosniff');
     res.setHeader('referrer-policy', 'no-referrer');
     res.setHeader(
       'content-security-policy',
-      "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+      `default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors ${frameAncestors}; base-uri 'none'`,
     );
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/healthz') return send(res, 200, { ok: true });
+      if (url.pathname.startsWith('/lti/')) return await ltiRoute(req, res, url);
       if (url.pathname.startsWith('/api/')) {
         const ip = clientIp(req);
         if (limited(ip, 600)) throw new HttpError(429, 'slow down a little');
@@ -306,7 +380,7 @@ export function createApp({ store = makeStore(), env = process.env, seed } = {})
     }
   });
   server.on('close', () => clearInterval(sweep));
-  return { server, store };
+  return { server, store, lti };
 }
 
 // Run directly: node src/server.js

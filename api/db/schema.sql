@@ -28,3 +28,21 @@ CREATE TABLE IF NOT EXISTS events (
   at          timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS events_student_idx ON events (student_id, at DESC);
+
+-- LTI (Brightspace and other LMS launches)
+-- A student can have several sign-in tokens (one per device or launch).
+CREATE TABLE IF NOT EXISTS student_tokens (
+  token_hash  text PRIMARY KEY,
+  student_id  uuid NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS student_tokens_student_idx ON student_tokens (student_id);
+
+-- One row per LMS course (class code derived from platform, deployment and course id).
+CREATE TABLE IF NOT EXISTS classes (
+  code        text PRIMARY KEY,
+  data        jsonb NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS students_lti_idx ON students ((data->'lti'->>'ltiKey'));

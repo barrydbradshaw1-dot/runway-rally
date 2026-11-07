@@ -9,8 +9,25 @@ export class MemoryStore {
     this.byToken = new Map();
     this.tasks = new Map();
     this.events = [];
+    this.classes = new Map();
   }
   async init() {}
+  async addToken(studentId, tokenHash) {
+    this.byToken.set(tokenHash, studentId);
+  }
+  async getStudentByLtiKey(key) {
+    for (const s of this.students.values()) if (s.lti?.ltiKey === key) return structuredClone(s);
+    return null;
+  }
+  async upsertClass(code, patch) {
+    const merged = { code, ...(this.classes.get(code) || {}), ...patch };
+    this.classes.set(code, merged);
+    return structuredClone(merged);
+  }
+  async getClass(code) {
+    const c = this.classes.get(code);
+    return c ? structuredClone(c) : null;
+  }
   async createStudent(student, tokenHash) {
     this.students.set(student.id, structuredClone(student));
     this.byToken.set(tokenHash, student.id);
@@ -73,7 +90,33 @@ export class PgStore {
     ]);
   }
   async getStudentByTokenHash(hash) {
-    const r = await this.pool.query('SELECT data FROM students WHERE token_hash = $1', [hash]);
+    const r = await this.pool.query(
+      `SELECT data FROM students WHERE token_hash = $1
+       UNION ALL
+       SELECT s.data FROM student_tokens t JOIN students s ON s.id = t.student_id WHERE t.token_hash = $1
+       LIMIT 1`,
+      [hash],
+    );
+    return r.rows[0]?.data ?? null;
+  }
+  async addToken(studentId, tokenHash) {
+    await this.pool.query('INSERT INTO student_tokens (token_hash, student_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [tokenHash, studentId]);
+  }
+  async getStudentByLtiKey(key) {
+    const r = await this.pool.query("SELECT data FROM students WHERE data->>'ltiKey' = $1 OR data->'lti'->>'ltiKey' = $1 LIMIT 1", [key]);
+    return r.rows[0]?.data ?? null;
+  }
+  async upsertClass(code, patch) {
+    const r = await this.pool.query(
+      `INSERT INTO classes (code, data) VALUES ($1, $2)
+       ON CONFLICT (code) DO UPDATE SET data = classes.data || EXCLUDED.data, updated_at = now()
+       RETURNING data`,
+      [code, { code, ...patch }],
+    );
+    return r.rows[0].data;
+  }
+  async getClass(code) {
+    const r = await this.pool.query('SELECT data FROM classes WHERE code = $1', [code]);
     return r.rows[0]?.data ?? null;
   }
   async saveStudent(student) {
