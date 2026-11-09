@@ -509,3 +509,49 @@ h1 { -webkit-text-stroke: 2px var(--ink2); paint-order: stroke fill; font-style:
 .rt-head.b, .rt-cell.b:not(.rt-head) { background: #cdeeff; } .rt-head.b { background: var(--sky); }
 .rt-cell:not(.rt-head):not(.rt-note):not(.rt-gap) { font-size: 1.4rem; border: 3px solid var(--ink2); }
 .rt-note { font-size: 0.82rem; color: var(--soft); text-align: left; }
+
+
+/* ---------- confidence bars, locks, goal, sets ---------- */
+.bar.is-locked { opacity: 0.6; }
+.bar .gse { font-size: 0.7rem; font-weight: 800; color: var(--violet); background: #efe6ff; border: 2px solid var(--ink2); border-radius: 6px; padding: 0 5px; margin-left: 4px; }
+.bar .need { font-size: 0.8rem; }
+.goal.hit { background: linear-gradient(135deg, #fff6c9, #ffe3f1); }
+.goal .fill { background: var(--rainbow); }
+.sets .set { border: 3px solid var(--ink2); border-radius: 12px; padding: 8px 10px; display: grid; gap: 2px; background: #fff; box-shadow: 3px 3px 0 var(--line); }
+.sets .set.done { background: linear-gradient(135deg, #fff6c9, #ffe3f1, #d9f1ff); box-shadow: 3px 3px 0 var(--gold); }
+
+/* table + tape models for the explain panel */
+.tm-grid { display: grid; gap: 6px; text-align: center; }
+.tm-cell { padding: 10px 6px; border: 3px solid var(--ink2); border-radius: 10px; font-weight: 800; font-size: 1.15rem; background: #fff7fc; }
+.tm-head { background: var(--ink2); color: #fff; font-size: 0.8rem; text-transform: capitalize; }
+.tm-ask { background: #fff6c9; }
+.tm-note { margin: 8px 0 0; text-align: center; font-weight: 700; color: var(--violet); }
+
+/* Runway Show */
+.runway-stage { position: relative; height: 360px; overflow: hidden; padding: 0; background: linear-gradient(180deg, #1a0f45 0%, #3b1f8f 60%, #7a3cff 100%); }
+.runway-stage .spots { position: absolute; inset: 0; pointer-events: none; }
+.runway-stage .spots span { position: absolute; top: -20px; width: 110px; height: 380px; background: linear-gradient(180deg, #ffffffaa, transparent 85%); clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); animation: sweep 3.6s ease-in-out infinite alternate; }
+.runway-stage .spots span:nth-child(1) { left: 6%; }
+.runway-stage .spots span:nth-child(2) { left: 40%; animation-delay: 0.6s; }
+.runway-stage .spots span:nth-child(3) { right: 6%; animation-delay: 1.2s; }
+@keyframes sweep { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+.runway-stage .crowd { position: absolute; bottom: 0; left: 0; right: 0; font-size: 1.5rem; text-align: center; letter-spacing: 0.5em; background: #0d0630; padding: 6px 0; animation: crowdbob 1s ease-in-out infinite alternate; }
+@keyframes crowdbob { to { transform: translateY(-4px); } }
+.runway-stage .catwalk { position: absolute; left: 0; right: 0; bottom: 38px; height: 26px; background: linear-gradient(180deg, #ffe3f1, #ff8fc4); border-top: 4px solid #fff; box-shadow: 0 -2px 20px #ff4fb0aa; }
+.runway-stage .walker { position: absolute; bottom: 52px; left: 0; width: 150px; animation: walkacross 3.6s ease-in-out forwards; }
+.runway-stage .walker svg { width: 100%; height: auto; filter: drop-shadow(0 0 14px #ffffff88); }
+@keyframes walkacross { 0% { transform: translateX(-140px) scale(0.8); } 55% { transform: translateX(calc(50vw - 75px)) scale(1.18); } 70% { transform: translateX(calc(50vw - 75px)) scale(1.18) rotate(-3deg); } 100% { transform: translateX(calc(50vw - 75px)) scale(1.15); } }
+@media (min-width: 540px) { @keyframes walkacross { 0% { transform: translateX(-140px) scale(0.8); } 55%, 100% { transform: translateX(185px) scale(1.18); } } }
+.runway-stage .cam { position: absolute; top: 40%; font-size: 1.6rem; color: #fff; opacity: 0; animation: camflash 0.5s 3 forwards; pointer-events: none; text-shadow: 0 0 14px #fff; }
+@keyframes camflash { 0%, 100% { opacity: 0; transform: scale(0.4); } 40% { opacity: 1; transform: scale(1.4); } }
+.stars { font-size: 2rem; color: var(--gold); -webkit-text-stroke: 1.5px var(--ink2); letter-spacing: 0.1em; }
+
+@media (prefers-reduced-motion: reduce) { .runway-stage .spots span, .runway-stage .crowd, .runway-stage .walker, .runway-stage .cam { animation: none; } .runway-stage .walker { left: calc(50% - 75px); } }
+
+.runway-stage .catwalk { z-index: 1; }
+.runway-stage .walker { z-index: 3; bottom: 58px; transform-origin: 50% 100%; }
+.runway-stage .crowd { white-space: nowrap; letter-spacing: 0.25em; font-size: 1.35rem; z-index: 2; }
+.runway-stage .cam { z-index: 4; }
+
+.tile.wide { background: linear-gradient(135deg, #1a0f45, #3b1f8f 60%, #7a3cff); color: #fff; border-color: var(--ink2) !important; box-shadow: 4px 5px 0 var(--hotpink) !important; }
+.tile.wide .jp { opacity: 0.9; }

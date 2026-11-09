@@ -12,6 +12,7 @@ import {
   recordInterest,
   newInterest,
   topInterests,
+  isUnlocked,
 } from './adaptive.js';
 
 export const COMMISSION_LENGTH = 5;
@@ -26,18 +27,57 @@ export const ITEMS = [
   { id: 'sale-scarf', name: 'Sale-Day Scarf', slot: 'accessory', skill: 'percent', threshold: 0.5 },
   { id: 'couture-cape', name: 'Couture Cape', slot: 'outer', skill: 'frac_part', threshold: 0.8 },
   { id: 'crystal-crown', name: 'Crystal Crown', slot: 'jewelry', skill: 'ratio', threshold: 0.8 },
+  { id: 'rate-beret', name: 'Unit Rate Beret', slot: 'hat', skill: 'unit_rate', threshold: 0.5 },
+  { id: 'scale-shades', name: 'Scale Star Shades', slot: 'face', skill: 'scale', threshold: 0.5 },
+  { id: 'markup-boots', name: 'Markup Platform Boots', slot: 'shoes', skill: 'markup', threshold: 0.5 },
+  { id: 'profit-halo', name: 'Profit Halo', slot: 'aura', skill: 'integers', threshold: 0.5 },
+  { id: 'budget-wings', name: 'Balanced Budget Wings', slot: 'back', skill: 'equations', threshold: 0.6 },
+];
+
+// Outfit sets: owning every piece completes the set and lights up the Runway Show.
+export const SETS = [
+  { id: 'gala', name: 'Gala Night', items: ['gala-gown', 'ratio-pearls', 'crystal-crown'] },
+  { id: 'street', name: 'Street Boss', items: ['fraction-jacket', 'markup-boots', 'scale-shades'] },
+  { id: 'luxe', name: 'Luxe Label', items: ['couture-cape', 'sale-scarf', 'rate-beret'] },
+  { id: 'angel', name: 'Angel Edition', items: ['budget-wings', 'profit-halo', 'crystal-crown'] },
 ];
 
 export const CARDS = [
   { id: 'muse-mira', name: 'Mira, Gala Client', type: 'muse', rarity: 'common' },
   { id: 'muse-juno', name: 'Juno, Street Stylist', type: 'muse', rarity: 'common' },
+  { id: 'muse-kaede', name: 'Kaede, Vintage Hunter', type: 'muse', rarity: 'common' },
+  { id: 'muse-rin', name: 'Rin, Backstage Lead', type: 'muse', rarity: 'common' },
   { id: 'fabric-silk', name: 'Moonsilk', type: 'fabric', rarity: 'common' },
+  { id: 'fabric-denim', name: 'Starwash Denim', type: 'fabric', rarity: 'common' },
+  { id: 'fabric-tulle', name: 'Cloud Tulle', type: 'fabric', rarity: 'common' },
   { id: 'gem-opal', name: 'Aurora Opal', type: 'gem', rarity: 'common' },
+  { id: 'gem-topaz', name: 'Sunrise Topaz', type: 'gem', rarity: 'common' },
   { id: 'skill-hint', name: 'Extra Hint Charm', type: 'skill', rarity: 'rare' },
+  { id: 'skill-focus', name: 'Focus Charm', type: 'skill', rarity: 'rare' },
   { id: 'style-neon', name: 'Neon Street Look', type: 'style', rarity: 'rare' },
+  { id: 'style-vintage', name: 'Vintage Pop Look', type: 'style', rarity: 'rare' },
+  { id: 'style-techwear', name: 'Techwear Edit', type: 'style', rarity: 'rare' },
+  { id: 'gem-sapphire', name: 'Midnight Sapphire', type: 'gem', rarity: 'rare' },
   { id: 'muse-professor', name: 'Headmistress Hana', type: 'muse', rarity: 'epic' },
+  { id: 'muse-saya', name: 'Saya, Runway Legend', type: 'muse', rarity: 'epic' },
+  { id: 'fabric-aurora', name: 'Aurora Weave', type: 'fabric', rarity: 'epic' },
   { id: 'spot-crown', name: 'Spotlight: Starlit Crown', type: 'spotlight', rarity: 'legendary' },
+  { id: 'spot-gown', name: 'Spotlight: Galaxy Gown', type: 'spotlight', rarity: 'legendary' },
 ];
+
+// Students saved before a skill existed get a starting value so nothing is NaN or missing.
+export function healStudent(s) {
+  if (!s) return s;
+  s.mastery ??= {};
+  s.wrongStreak ??= {};
+  s.skillStats ??= {};
+  for (const k of SKILL_IDS) {
+    s.mastery[k] ??= START_MASTERY;
+    s.wrongStreak[k] ??= 0;
+    s.skillStats[k] ??= { answered: 0, correct: 0 };
+  }
+  return s;
+}
 
 export function newStudent({ id, classCode, nickname }) {
   const mastery = {};
@@ -73,6 +113,7 @@ export function publicStudent(s) {
     classCode: s.classCode,
     thread: s.thread,
     mastery: s.mastery,
+    locked: SKILL_IDS.filter((k) => !isUnlocked(k, s.mastery)),
     unlocks: s.unlocks.map((id) => ITEMS.find((i) => i.id === id)).filter(Boolean),
     cards: s.cards,
     stats: s.stats,
@@ -147,6 +188,7 @@ export function publicTask(task, commission) {
     math: task.math,
     plain: task.plain,
     model: task.model,
+    steps: task.steps,
     choices: task.choices,
     number: commission.done + 1,
     of: commission.total,
@@ -159,8 +201,8 @@ export function giveHint(task) {
   return { level: task.hintLevel, text: task.hints[task.hintLevel - 1] };
 }
 
-const PRAISE = ['Perfect cut!', 'That fits beautifully.', 'Nailed it.', 'Runway ready.', 'Exactly right.'];
-const ENCOURAGE = ['Close. Take a look at the hint and try again.', 'Not quite yet. You can ask for a hint.'];
+const PRAISE = ['Nailed it.', 'Clean work.', 'That is runway ready.', 'Exactly right.', 'You make it look easy.', 'Sharp. Really sharp.'];
+const ENCOURAGE = ['Not yet. Check the picture or take a hint, then go again.', 'Close. Rethink the setup and try another way.'];
 
 export function applyAnswer(student, task, raw, rng) {
   if (task.answered) return { error: 'task already answered' };
@@ -195,7 +237,7 @@ export function applyAnswer(student, task, raw, rng) {
     thread,
     mastery: student.mastery[task.skill],
     skill: task.skill,
-    feedback: correct ? PRAISE[Math.floor(rng() * PRAISE.length)] : 'Good effort. Here is how it works.',
+    feedback: correct ? PRAISE[Math.floor(rng() * PRAISE.length)] : 'That one was tricky. Here is how it works, and you will see it again.',
     explanation: correct ? null : task.hints[2],
     revealedAnswer: correct ? null : task.answer,
     unlocked: grantUnlocks(student),
@@ -256,7 +298,7 @@ export function classSummary(students) {
     for (const k of SKILL_IDS) {
       const n = s.skillStats?.[k]?.answered ?? 0;
       attempts[k] = n;
-      if ((s.wrongStreak[k] || 0) >= 3 || (n >= HELP_MIN_ANSWERS && s.mastery[k] < HELP_BELOW)) stuck.push(k);
+      if ((s.wrongStreak[k] || 0) >= 3 || (n >= HELP_MIN_ANSWERS && (s.mastery[k] ?? START_MASTERY) < HELP_BELOW)) stuck.push(k);
     }
     return {
       nickname: s.nickname,

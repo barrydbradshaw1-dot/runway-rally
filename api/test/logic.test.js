@@ -152,7 +152,7 @@ test('every task shows the math and offers 3 distinct positive choices including
         for (let seed = 1; seed <= 200; seed++) {
           const t = makeTask(skill, level, theme, mulberry32(seed));
           assert.equal(typeof t.math, 'string');
-          assert.ok(t.math.endsWith('?'));
+          assert.ok(t.math.includes('?'));
           assert.equal(t.choices.length, 3);
           assert.equal(new Set(t.choices).size, 3, `${skill} L${level} seed ${seed}: ${t.choices}`);
           assert.ok(t.choices.every((c) => Number.isInteger(c) && c > 0));
@@ -172,12 +172,57 @@ test('every task has plain words and a model for the Show me how panel', () => {
         for (let seed = 1; seed <= 100; seed++) {
           const t = makeTask(skill, level, theme, mulberry32(seed));
           assert.ok(t.plain.length > 10);
-          assert.ok(['part', 'add', 'ratio', 'percent'].includes(t.model.kind));
+          assert.ok(['part', 'add', 'ratio', 'percent', 'table', 'equation'].includes(t.model.kind));
           kinds.add(t.model.kind);
-          assert.ok(!t.math.includes('×'), 'math reads as "of", not a cross');
+          if (skill === 'frac_part' || skill === 'frac_add') assert.ok(!t.math.includes('×'), 'fraction math reads as "of"');
         }
       }
     }
   }
-  assert.equal(kinds.size, 4);
+  assert.equal(kinds.size, 6);
+});
+
+test('every skill carries a GSE standard tag and its prerequisites exist', async () => {
+  const { SKILLS } = await import('../src/skills.js');
+  for (const [id, sk] of Object.entries(SKILLS)) {
+    assert.match(sk.gse, /^[5-8]\.[A-Z]{1,2}\.\d[a-z]?$/, `${id} gse tag`);
+    for (const p of sk.prereq) assert.ok(SKILLS[p], `${id} prereq ${p}`);
+  }
+  assert.equal(Object.keys(SKILLS).length, 9);
+});
+
+test('students saved before new skills existed are healed with starting values', async () => {
+  const { healStudent } = await import('../src/logic.js');
+  const old = { mastery: { ratio: 0.6 }, wrongStreak: {}, skillStats: {} };
+  healStudent(old);
+  assert.equal(old.mastery.ratio, 0.6);
+  assert.equal(old.mastery.equations, 0.3);
+  assert.equal(old.skillStats.markup.answered, 0);
+});
+
+test('every item points at a real skill and every set at real items', async () => {
+  const { ITEMS, SETS } = await import('../src/logic.js');
+  const { SKILLS } = await import('../src/skills.js');
+  const ids = new Set(ITEMS.map((i) => i.id));
+  for (const i of ITEMS) assert.ok(i.skill === null || SKILLS[i.skill], i.id);
+  for (const s of SETS) for (const id of s.items) assert.ok(ids.has(id), `${s.id}: ${id}`);
+});
+
+test('a student who answers everything correctly reaches all 9 skills, unlocks items, and never breaks', () => {
+  const rng = mulberry32(2026);
+  const s = newStudent({ id: 'sim', classCode: 'SIM', nickname: 'Sim' });
+  const touched = new Set();
+  for (let c = 0; c < 140; c++) {
+    startCommission(s, { rng });
+    for (let i = 0; i < COMMISSION_LENGTH; i++) {
+      const task = nextTask(s, rng);
+      touched.add(task.skill);
+      assert.equal(task.choices.length, 3);
+      const r = applyAnswer(s, task, String(task.answer), rng);
+      assert.ok(!r.error, r.error);
+      for (const k of Object.keys(s.mastery)) assert.ok(Number.isFinite(s.mastery[k]));
+    }
+  }
+  assert.equal(touched.size, 9, [...touched].join());
+  assert.ok(s.unlocks.length >= 10, `unlocked ${s.unlocks.length}`);
 });

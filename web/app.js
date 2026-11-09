@@ -125,6 +125,11 @@ const EYES = ['#ff4fb0', '#27b8ff', '#16d9a0', '#7a3cff', '#ff8a3d', '#ffc21a'];
 const style = { hair: Number(store.get('rr_hair')) || 0, eyes: Number(store.get('rr_eyes')) || 1, off: new Set(JSON.parse(store.get('rr_off') || '[]')) };
 const worn = (id) => has(id) && !style.off.has(id);
 
+function setsComplete() {
+  const sets = state.catalog?.sets || [];
+  return sets.filter((x) => x.items.every((id) => worn(id)));
+}
+
 function avatar(mood = 'normal') {
   const hr = HAIR[style.hair % HAIR.length];
   const eye = EYES[style.eyes % EYES.length];
@@ -140,6 +145,15 @@ function avatar(mood = 'normal') {
   const back = [];
   const body = [];
   const face = [];
+  // Balanced Budget Wings (behind everything)
+  if (worn('budget-wings')) {
+    for (const m of [1, -1]) {
+      const X = (x) => (m === 1 ? x : 200 - x);
+      back.push(s('path', { d: `M${X(60)} 140 Q${X(0)} 90 ${X(6)} 40 Q${X(40)} 60 ${X(64)} 110 Z`, fill: '#fff', stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+      back.push(s('path', { d: `M${X(60)} 150 Q${X(10)} 130 ${X(8)} 96 Q${X(42)} 104 ${X(64)} 134 Z`, fill: '#ffd6ee', stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+      back.push(s('path', { d: `M${X(18)} 62 l${m * 10} 6 M${X(26)} 92 l${m * 14} 6`, stroke: '#ff8fc4', 'stroke-width': 2, 'stroke-linecap': 'round', fill: 'none' }));
+    }
+  }
 
   // long back hair + twin ribbons
   // twin tails + ahoge (anime hair antenna)
@@ -159,6 +173,13 @@ function avatar(mood = 'normal') {
   body.push(s('rect', { x: 104, y: 238, width: 14, height: 18, rx: 4, fill: '#fff' }));
   body.push(s('path', { d: 'M74 258 Q89 250 98 258 L98 268 L72 268 Z', fill: '#ff4fb0' }));
   body.push(s('path', { d: 'M126 258 Q111 250 102 258 L102 268 L128 268 Z', fill: '#27b8ff' }));
+  if (worn('markup-boots')) {
+    for (const [x, c] of [[70, '#7a3cff'], [102, '#27b8ff']]) {
+      body.push(s('rect', { x, y: 236, width: 28, height: 26, rx: 8, fill: c, stroke: '#1a0f45', 'stroke-width': 2.5 }));
+      body.push(s('rect', { x: x - 2, y: 262, width: 32, height: 9, rx: 4, fill: '#fff', stroke: '#1a0f45', 'stroke-width': 2.5 }));
+      body.push(s('path', { d: `M${x + 5} 244 h18 M${x + 5} 252 h18`, stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' }));
+    }
+  }
   body.push(s('rect', { x: 88, y: 128, width: 24, height: 22, rx: 8, fill: '#ffe0cc' }));
 
   if (worn('gala-gown')) {
@@ -195,6 +216,15 @@ function avatar(mood = 'normal') {
     face.push(s('path', { d: `M${x} 70 l${x < 100 ? -2 : 2} 18 l${x < 100 ? -16 : 16} 0 z`, fill: '#ff8a3d' }));
     face.push(s('circle', { cx: x, cy: 70, r: 5, fill: '#ffc21a' }));
   }
+  if (worn('rate-beret')) {
+    face.push(s('path', { d: 'M52 56 Q56 22 104 24 Q150 26 150 54 Q130 44 100 46 Q72 46 52 56 Z', fill: '#ff4fb0', stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+    face.push(s('circle', { cx: 112, cy: 20, r: 5, fill: '#ff4fb0', stroke: '#1a0f45', 'stroke-width': 2.5 }));
+    face.push(s('path', { d: 'M76 40 l3 6 l7 1 l-5 5 l1 7 l-6 -3 l-6 3 l1 -7 l-5 -5 l7 -1 z', fill: '#ffe36e' }));
+  }
+  if (worn('profit-halo')) {
+    face.push(s('ellipse', { cx: 100, cy: 10, rx: 32, ry: 8, fill: 'none', stroke: '#ffc21a', 'stroke-width': 5 }));
+    face.push(s('ellipse', { cx: 100, cy: 10, rx: 32, ry: 8, fill: 'none', stroke: '#fff', 'stroke-width': 1.5, opacity: 0.8 }));
+  }
   // big sparkly anime eyes (blink as a group); mood swaps them for happy arcs
   const eyes = [];
   const sparkle4 = (x, y, r, fill = '#fff') => s('path', { d: `M${x} ${y - r} Q${x + r * 0.2} ${y - r * 0.2} ${x + r} ${y} Q${x + r * 0.2} ${y + r * 0.2} ${x} ${y + r} Q${x - r * 0.2} ${y + r * 0.2} ${x - r} ${y} Q${x - r * 0.2} ${y - r * 0.2} ${x} ${y - r} Z`, fill });
@@ -213,6 +243,12 @@ function avatar(mood = 'normal') {
     eyes.push(s('path', { d: `M${x + dir * 15} 89 l${dir * 7} -5`, stroke: '#1a0f45', 'stroke-width': 3.2, 'stroke-linecap': 'round' }));
   }
   face.push(s('g', { class: 'av-eyes' }, eyes));
+  if (worn('scale-shades')) {
+    for (const x of [78, 122]) {
+      face.push(s('path', { d: `M${x} 84 l5 10 l11 1 l-8 8 l2 11 l-10 -6 l-10 6 l2 -11 l-8 -8 l11 -1 z`, fill: '#27b8ff44', stroke: '#1a0f45', 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    }
+    face.push(s('path', { d: 'M92 98 Q100 94 108 98', fill: 'none', stroke: '#1a0f45', 'stroke-width': 3, 'stroke-linecap': 'round' }));
+  }
   face.push(s('ellipse', { cx: 62, cy: 121, rx: 10, ry: 6, fill: '#ff8fc4', opacity: 0.8 }));
   face.push(s('ellipse', { cx: 138, cy: 121, rx: 10, ry: 6, fill: '#ff8fc4', opacity: 0.8 }));
   for (const bx of [57, 133]) face.push(s('path', { d: `M${bx} 124 l4 -6 M${bx + 5} 125 l4 -6 M${bx + 10} 126 l4 -6`, stroke: '#ff5f9e', 'stroke-width': 1.8, 'stroke-linecap': 'round', fill: 'none' }));
@@ -229,6 +265,7 @@ function avatar(mood = 'normal') {
     face.push(s('circle', { cx: 100, cy: 36, r: 4, fill: '#ff4fb0' }));
   }
 
+  if (setsComplete().length) back.unshift(s('ellipse', { cx: 100, cy: 150, rx: 92, ry: 128, fill: 'none', stroke: '#ffc21a', 'stroke-width': 4, 'stroke-dasharray': '3 9', 'stroke-linecap': 'round', opacity: 0.9 }), s('ellipse', { cx: 100, cy: 150, rx: 84, ry: 120, fill: '#ffe36e', opacity: 0.18 }));
   L.push(s('g', { class: 'av-hair' }, back), s('g', { class: 'av-body' }, body, s('g', { class: 'av-head' }, face)));
   return s('svg', { class: 'avatar', viewBox: '0 0 200 280', role: 'img', 'aria-label': 'Your designer wearing the items you have earned' }, L);
 }
@@ -314,8 +351,77 @@ function rain(n = 40) {
 }
 
 
+// ---------- weekly goal (kept in this browser) ----------
+function weekKey(d = new Date()) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // Monday
+  return x.toISOString().slice(0, 10);
+}
+function weeklyGoal(st) {
+  let wk;
+  try {
+    wk = JSON.parse(store.get('rr_wk') || 'null');
+  } catch {
+    wk = null;
+  }
+  if (!wk || wk.key !== weekKey()) {
+    wk = { key: weekKey(), base: st.stats.commissions };
+    store.set('rr_wk', JSON.stringify(wk));
+  }
+  const goal = 3;
+  const done = Math.max(0, st.stats.commissions - wk.base);
+  const hit = done >= goal;
+  const fill = h('div', { class: 'fill' });
+  fill.style.width = `${Math.min(100, (done / goal) * 100)}%`;
+  return h(
+    'div',
+    { class: `card stack goal ${hit ? 'hit' : ''}` },
+    h('div', { class: 'row between' }, h('h3', { text: 'Weekly drop goal' }), h('span', { class: 'pill', text: `${Math.min(done, goal)}/${goal}` })),
+    h('div', { class: 'bar' }, h('div', { class: 'track', role: 'progressbar', 'aria-valuenow': Math.min(done, goal), 'aria-valuemin': 0, 'aria-valuemax': goal, 'aria-label': 'Weekly goal' }, fill)),
+    h('p', { class: 'muted', text: hit ? 'Goal hit. Your collection drops this week are done. Keep going if you want.' : `Finish ${goal - done} more commission${goal - done === 1 ? '' : 's'} this week to hit your drop goal.` }),
+  );
+}
+
+// ---------- Runway Show ----------
+function runwayShow() {
+  const worn_ = state.catalog.items.filter((i) => worn(i.id));
+  const sets = setsComplete();
+  const score = worn_.length * 10 + sets.length * 25;
+  const stars = score >= 90 ? 5 : score >= 60 ? 4 : score >= 40 ? 3 : score >= 20 ? 2 : 1;
+  const stage = h('div', { class: 'card runway-stage' });
+  const run = () => {
+    stage.replaceChildren(
+      h('div', { class: 'spots', 'aria-hidden': 'true' }, h('span'), h('span'), h('span')),
+      h('div', { class: 'crowd', 'aria-hidden': 'true', text: '📸 👏 ✨ 💖 📸 👏 🎀 📸' }),
+      h('div', { class: 'walker' }, avatar('happy')),
+      h('div', { class: 'catwalk', 'aria-hidden': 'true' }),
+    );
+    for (let i = 0; i < 6; i++) {
+      const f = h('span', { class: 'cam', 'aria-hidden': 'true', text: '✦' });
+      f.style.left = `${8 + Math.random() * 84}%`;
+      f.style.animationDelay = `${0.4 + Math.random() * 3}s`;
+      stage.append(f);
+    }
+    setTimeout(() => burst(stage, 40), 3400);
+  };
+  const verdict = ['', 'Warm-up walk', 'Nice start', 'Solid look', 'Fierce', 'ICONIC'][stars];
+  show(
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Runway Show' }), h('span')),
+    stage,
+    h('div', { class: 'card stack center' },
+      h('div', { class: 'stars', role: 'img', 'aria-label': `${stars} out of 5 stars`, text: '★'.repeat(stars) + '☆'.repeat(5 - stars) }),
+      h('h3', { text: verdict }),
+      h('p', { class: 'muted', text: `Style score ${score}. ${worn_.length} pieces worn${sets.length ? `, ${sets.length} outfit set${sets.length > 1 ? 's' : ''} complete: ${sets.map((x) => x.name).join(', ')}` : '. Complete an outfit set for +25.'}` }),
+    ),
+    h('button', { class: 'primary', text: '▶ Walk again', onclick: run }),
+    h('p', { class: 'muted center', text: 'Wear more pieces in the Wardrobe to raise your score.' }),
+  );
+  run();
+}
+
 // ---------- anime extras (all original art) ----------
-const TIPS = ['You can do it!', 'Show the math, then pick!', 'Stuck? Hints are free!', 'Fractions are just slices!', 'Take your time, designer!'];
+const TIPS = ['You have got this.', 'Set it up first, then pick.', 'Stuck? Open Show me how.', 'Every miss makes the next one easier.', 'Take your time. No timer here.'];
 function mascot() {
   const L = [
     s('ellipse', { cx: 40, cy: 66, rx: 22, ry: 6, fill: '#7a3cff', opacity: 0.15 }),
@@ -414,7 +520,7 @@ async function homeScreen() {
     api('/api/event', { method: 'POST', body: { area } }).catch(() => {});
     fn();
   };
-  const JP = { 'Jewelry Bench': 'ジュエリー', 'Pattern Table': 'パターン', Runway: 'ランウェイ', 'Surprise me': 'サプライズ', Wardrobe: 'ワードローブ', Cards: 'カード' };
+  const JP = { 'Jewelry Bench': 'ジュエリー', 'Pattern Table': 'パターン', Runway: 'ランウェイ', 'Surprise me': 'サプライズ', Wardrobe: 'ワードローブ', Cards: 'カード', 'Runway Show': 'ランウェイショー' };
   const tile = (emoji, label, onclick, extra = '') => h('button', { class: `tile ${extra}`, onclick }, h('span', { class: 'emoji', 'aria-hidden': 'true', text: emoji }), h('span', { text: label }), h('span', { class: 'jp', 'aria-hidden': 'true', text: JP[label] || '' }));
 
   show(
@@ -431,28 +537,39 @@ async function homeScreen() {
       tile('🎀', 'Surprise me', () => start(null)),
       tile('👗', 'Wardrobe', () => open('wardrobe', wardrobeScreen)),
       tile('🃏', 'Cards', () => open('cards', cardsScreen)),
+      tile('🎬', 'Runway Show', () => runwayShow(), 'wide'),
     ),
-    h('div', { class: 'card stack' }, h('h3', { text: 'Your skills' }), skillBars(st)),
+    weeklyGoal(st),
+    h('div', { class: 'card stack' }, h('h3', { text: 'Your confidence' }), skillBars(st)),
     st.viaLti ? null : h('button', { class: 'ghost', onclick: signOut, text: 'Switch student' }),
   );
 }
 
 function skillBars(st) {
   const names = state.catalog.skills;
+  const std = state.catalog.standards || {};
+  const pre = state.catalog.prereq || {};
+  const tier = (p) => (p < 40 ? 'Warming up' : p < 70 ? 'Getting it' : 'Locked in');
   return h(
     'div',
     { class: 'bars' },
     Object.keys(names).map((id) => {
       const pct = Math.round(st.mastery[id] * 100);
+      const locked = (st.locked || []).includes(id);
       const fill = h('div', { class: 'fill' });
-      fill.style.width = `${pct}%`;
-      return h('div', { class: 'bar' }, h('div', { class: 'row between' }, h('span', { text: names[id] }), h('span', { class: 'muted', text: `${pct}%` })), h('div', { class: 'track', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': names[id] }, fill));
+      fill.style.width = `${locked ? 0 : pct}%`;
+      const need = (pre[id] || []).map((p) => names[p]).join(' + ');
+      return h(
+        'div',
+        { class: `bar ${locked ? 'is-locked' : ''}` },
+        h('div', { class: 'row between' }, h('span', {}, locked ? '🔒 ' : '', names[id], std[id] ? h('span', { class: 'gse', text: ` ${std[id]}` }) : null), h('span', { class: 'muted', text: locked ? 'Locked' : `${tier(pct)} · ${pct}%` })),
+        h('div', { class: 'track', role: 'progressbar', 'aria-valuenow': locked ? 0 : pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': names[id] }, fill),
+        locked && need ? h('span', { class: 'muted need', text: `Unlocks when you build confidence in ${need}.` }) : null,
+      );
     }),
   );
 }
 
-
-// Scratch calculator (no eval: a tiny four-function state machine). It never touches the answer unless "Use answer" is tapped.
 function calculator(onUse) {
   const c = { acc: null, op: null, cur: '', shown: '0', fresh: false };
   const out = h('div', { class: 'calc-out', role: 'status', 'aria-label': 'Calculator display', text: '0' });
@@ -560,7 +677,39 @@ function ratioTable(m) {
     cell(String(m.given), 'a'), cell(blank(), 'b'), cell(h('span', {}, '× ', blank(), ' patterns'), 'rt-note'));
 }
 
-function stepsFor(m) {
+function blankify(str) {
+  return String(str).split('?').flatMap((part, i, arr) => (i < arr.length - 1 ? [part, blank()] : [part]));
+}
+
+function tableModel(m) {
+  const cols = m.head.length;
+  const cells = [];
+  for (const hd of m.head) cells.push(h('div', { class: 'tm-cell tm-head', text: hd }));
+  for (const row of m.rows) for (const c of row) cells.push(h('div', { class: `tm-cell ${String(c).includes('?') ? 'tm-ask' : ''}` }, blankify(c)));
+  const grid = h('div', { class: 'tm-grid pic', role: 'table', 'aria-label': 'Table of values' }, cells);
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  return h('div', {}, grid, m.note ? h('p', { class: 'tm-note', text: m.note }) : null);
+}
+
+function equationTape(m) {
+  const W = 300, X = 10;
+  const qW = m.q ? Math.max(46, (W * m.q) / m.T) : 0;
+  const t = (x, y, txt, anchor = 'middle', size = 13, fill = '#1a0f45') => s('text', { x, y, 'text-anchor': anchor, 'font-size': size, 'font-weight': 800, fill }, document.createTextNode(txt));
+  const kids = [];
+  if (m.sign === 1) {
+    kids.push(s('rect', { x: X, y: 30, width: W - qW, height: 36, fill: '#ffc2e0', stroke: '#1a0f45', 'stroke-width': 2.5 }), t(X + (W - qW) / 2, 53, `${m.p} each × ? = $?`));
+    if (m.q) kids.push(s('rect', { x: X + W - qW, y: 30, width: qW, height: 36, fill: '#ffe083', stroke: '#1a0f45', 'stroke-width': 2.5 }), t(X + W - qW / 2, 53, `$${m.q}`));
+  } else {
+    kids.push(s('rect', { x: X, y: 30, width: W - qW, height: 36, fill: '#cdeeff', stroke: '#1a0f45', 'stroke-width': 2.5 }), t(X + (W - qW) / 2, 53, `you paid $${m.T}`));
+    kids.push(s('rect', { x: X + W - qW, y: 30, width: qW, height: 36, fill: '#9af0cd', stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-dasharray': '5 4' }), t(X + W - qW / 2, 53, `−$${m.q}`));
+    kids.push(t(X + W / 2, 20, `before coupon: ${m.p} each × ? = $?`, 'middle', 12, '#6a5aa8'));
+  }
+  kids.push(s('path', { d: `M${X} 76 v6 h${W} v-6`, fill: 'none', stroke: '#1a0f45', 'stroke-width': 2.5 }), t(X + W / 2, 98, m.sign === 1 ? `total = $${m.T}` : `bill after coupon = $${m.T}`));
+  return s('svg', { viewBox: '0 0 320 106', class: 'pic', role: 'img', 'aria-label': 'A tape diagram of the budget' }, kids);
+}
+
+function stepsFor(m, t) {
+  if (t && t.steps && (m.kind === 'table' || m.kind === 'equation')) return t.steps.map((line) => h('li', {}, blankify(line)));
   const li = (...kids) => h('li', {}, ...kids);
   if (m.kind === 'part') return [li(`Split ${m.total} ${m.unit} into ${m.parts} equal parts: ${m.total} ÷ ${m.parts} = `, blank(), ` ${m.unit} for each part.`), li(`You take ${m.take} parts: ${m.take} × `, blank(), ' = ', blank(), ` ${m.unit}.`)];
   if (m.kind === 'add') return [li(`Add the slices: ${m.take[0]} + ${m.take[1]} = ${m.take[0] + m.take[1]} parts out of ${m.parts}.`), li(`One part is ${m.total} ÷ ${m.parts} = `, blank(), ` ${m.unit}.`), li(`${m.take[0] + m.take[1]} × `, blank(), ' = ', blank(), ` ${m.unit}.`)];
@@ -571,7 +720,7 @@ function stepsFor(m) {
 function explainPanel(t) {
   const m = t.model;
   const body = h('div', { class: 'ex-body' });
-  const modes = { Picture: () => body.replaceChildren(m.kind === 'ratio' ? ratioTable(m) : m.kind === 'percent' ? picturePercent(m) : pictureBar(m)), Steps: () => body.replaceChildren(h('ol', { class: 'ex-steps' }, stepsFor(m))) };
+  const modes = { Picture: () => body.replaceChildren(m.kind === 'ratio' ? ratioTable(m) : m.kind === 'percent' ? picturePercent(m) : m.kind === 'table' ? tableModel(m) : m.kind === 'equation' ? equationTape(m) : pictureBar(m)), Steps: () => body.replaceChildren(h('ol', { class: 'ex-steps' }, stepsFor(m, t))) };
   const tabs = Object.keys(modes).map((name, i) => h('button', { class: `chip-btn ex-tab ${i === 0 ? 'on' : ''}`, type: 'button', 'aria-pressed': String(i === 0), text: name === 'Picture' ? '🖼️ Picture' : '🪜 Steps', onclick: (e) => {
     modes[name]();
     for (const b of tabs) { const on = b === e.currentTarget; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
@@ -793,6 +942,16 @@ function packScreen(r) {
   setTimeout(() => { burst(document.querySelector('.tcard'), 40); if (['epic', 'legendary'].includes(c.rarity)) rain(50); }, 450);
 }
 
+function setsList() {
+  const sets = state.catalog.sets || [];
+  const byId = Object.fromEntries(state.catalog.items.map((i) => [i.id, i]));
+  return h('div', { class: 'card stack sets' }, h('h3', { text: 'Outfit sets' }), ...sets.map((x) => {
+    const have = x.items.filter((id) => has(id)).length;
+    const done = x.items.every((id) => worn(id));
+    return h('div', { class: `set ${done ? 'done' : ''}` }, h('div', { class: 'row between' }, h('strong', { text: `${done ? '✦ ' : ''}${x.name}` }), h('span', { class: 'muted', text: `${have}/${x.items.length} owned${done ? ' · aura on' : ''}` })), h('span', { class: 'muted', text: x.items.map((id) => byId[id].name).join(' · ') }));
+  }));
+}
+
 function wardrobeScreen() {
   const items = state.catalog.items;
   const names = state.catalog.skills;
@@ -826,7 +985,7 @@ function wardrobeScreen() {
       }),
     );
   };
-  show(h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Wardrobe' }), h('span')), stage, h('p', { class: 'muted center', text: 'Tap Try on to dress up. Tap your designer to make her pose!' }), list);
+  show(h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Wardrobe' }), h('span')), stage, h('p', { class: 'muted center', text: 'Tap Try on to dress up. Tap your designer to make her pose!' }), setsList(), list);
   paint(false);
 }
 

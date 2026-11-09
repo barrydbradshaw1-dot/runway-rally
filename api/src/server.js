@@ -13,6 +13,7 @@ import { LtiError } from './lti/jwt.js';
 import {
   ITEMS,
   CARDS,
+  SETS,
   newStudent,
   publicStudent,
   startCommission,
@@ -40,7 +41,10 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const CATALOG = {
   items: ITEMS,
   cards: CARDS,
+  sets: SETS,
   skills: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].name])),
+  standards: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].gse])),
+  prereq: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].prereq])),
 };
 
 // Placeholder nickname filter. Replace with a real moderation list before any pilot with students.
@@ -196,7 +200,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       if (!who.all && who.classCode !== code) throw new HttpError(403, 'forbidden');
       const list = await store.listClass(code);
       const cls = await store.getClass(code);
-      const out = { classCode: code, title: cls?.contextTitle || null, skills: CATALOG.skills, students: classSummary(list) };
+      const out = { classCode: code, title: cls?.contextTitle || null, skills: CATALOG.skills, standards: CATALOG.standards, students: classSummary(list) };
       if (cls?.nrpsUrl) out.roster = await lti.rosterSummary(code, list);
       return send(res, 200, out);
     }

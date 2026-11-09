@@ -2,6 +2,7 @@
 // PgStore is used when DATABASE_URL is set.
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { healStudent } from './logic.js';
 
 export class MemoryStore {
   constructor() {
@@ -34,7 +35,7 @@ export class MemoryStore {
   }
   async getStudentByTokenHash(hash) {
     const id = this.byToken.get(hash);
-    return id ? structuredClone(this.students.get(id)) : null;
+    return id ? healStudent(structuredClone(this.students.get(id))) : null;
   }
   async saveStudent(student) {
     this.students.set(student.id, structuredClone(student));
@@ -51,7 +52,7 @@ export class MemoryStore {
     if (this.events.length > 5000) this.events.shift();
   }
   async listClass(classCode) {
-    return [...this.students.values()].filter((s) => s.classCode === classCode).map((s) => structuredClone(s));
+    return [...this.students.values()].filter((s) => s.classCode === classCode).map((s) => healStudent(structuredClone(s)));
   }
   async close() {}
 }
@@ -97,14 +98,14 @@ export class PgStore {
        LIMIT 1`,
       [hash],
     );
-    return r.rows[0]?.data ?? null;
+    return healStudent(r.rows[0]?.data ?? null);
   }
   async addToken(studentId, tokenHash) {
     await this.pool.query('INSERT INTO student_tokens (token_hash, student_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [tokenHash, studentId]);
   }
   async getStudentByLtiKey(key) {
     const r = await this.pool.query("SELECT data FROM students WHERE data->>'ltiKey' = $1 OR data->'lti'->>'ltiKey' = $1 LIMIT 1", [key]);
-    return r.rows[0]?.data ?? null;
+    return healStudent(r.rows[0]?.data ?? null);
   }
   async upsertClass(code, patch) {
     const r = await this.pool.query(
@@ -117,7 +118,7 @@ export class PgStore {
   }
   async getClass(code) {
     const r = await this.pool.query('SELECT data FROM classes WHERE code = $1', [code]);
-    return r.rows[0]?.data ?? null;
+    return healStudent(r.rows[0]?.data ?? null);
   }
   async saveStudent(student) {
     await this.pool.query('UPDATE students SET data = $2, updated_at = now() WHERE id = $1', [student.id, student]);
@@ -130,14 +131,14 @@ export class PgStore {
   }
   async getTask(id) {
     const r = await this.pool.query('SELECT data FROM tasks WHERE id = $1', [id]);
-    return r.rows[0]?.data ?? null;
+    return healStudent(r.rows[0]?.data ?? null);
   }
   async addEvent(studentId, type, payload = {}) {
     await this.pool.query('INSERT INTO events (student_id, type, payload) VALUES ($1,$2,$3)', [studentId, type, payload]);
   }
   async listClass(classCode) {
     const r = await this.pool.query('SELECT data FROM students WHERE class_code = $1 ORDER BY created_at', [classCode]);
-    return r.rows.map((x) => x.data);
+    return r.rows.map((x) => healStudent(x.data));
   }
   async close() {
     await this.pool?.end();

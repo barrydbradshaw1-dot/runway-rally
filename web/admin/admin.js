@@ -120,9 +120,10 @@ function csvCell(v) {
 }
 
 function exportCsv() {
-  const { students, skills } = state.data;
+  const { students, skills, standards = {} } = state.data;
   const ids = Object.keys(skills);
-  const rows = [['Nickname', 'Answered', 'Accuracy %', 'Commissions', ...ids.map((k) => `${skills[k]} mastery %`), ...ids.map((k) => `${skills[k]} answered`), 'Favorite areas', 'Needs help with']];
+  const tag = (k) => (standards[k] ? `${skills[k]} (GSE ${standards[k]})` : skills[k]);
+  const rows = [['Nickname', 'Answered', 'Accuracy %', 'Commissions', ...ids.map((k) => `${tag(k)} mastery %`), ...ids.map((k) => `${tag(k)} answered`), 'Favorite areas', 'Needs help with']];
   for (const s of sortedStudents(students, ids)) {
     rows.push([s.nickname, s.answered, s.accuracy ?? '', s.commissions, ...ids.map((k) => ((s.attempts?.[k] ?? 0) > 0 ? Math.round(s.mastery[k] * 100) : '')), ...ids.map((k) => s.attempts?.[k] ?? 0), s.topAreas.map((a) => AREA_LABELS[a] || a).join('; '), s.needsHelpWith.map((k) => skills[k]).join('; ')]);
   }
@@ -135,7 +136,7 @@ function exportCsv() {
 }
 
 function dashboard() {
-  const { students, skills, classCode, title, roster } = state.data;
+  const { students, skills, classCode, title, roster, standards = {} } = state.data;
   const rosterLine = roster && !roster.error ? `${roster.launched} of ${roster.enrolled} enrolled students have opened Runway Rally${roster.notLaunched ? ` · ${roster.notLaunched} have not yet` : ''}` : roster?.error ? 'Course roster is unavailable right now' : '';
   const ids = Object.keys(skills);
   const started = students.filter((s) => s.answered > 0);
@@ -162,7 +163,7 @@ function dashboard() {
   const table = h(
     'table',
     {},
-    h('thead', {}, h('tr', {}, h('th', { text: 'Student' }), ids.map((k) => h('th', { text: skills[k] })), h('th', { text: 'Accuracy' }), h('th', { text: 'Commissions' }), h('th', { text: 'Favorite areas' }))),
+    h('thead', {}, h('tr', {}, h('th', { text: 'Student' }), ids.map((k) => h('th', {}, skills[k], standards[k] ? h('span', { class: 'sub', text: `GSE ${standards[k]}` }) : null)), h('th', { text: 'Accuracy' }), h('th', { text: 'Commissions' }), h('th', { text: 'Favorite areas' }))),
     h(
       'tbody',
       {},
