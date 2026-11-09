@@ -665,6 +665,7 @@ function loginScreen(msg = '') {
     h('label', {}, 'Nickname (no real names, please)', nick),
     err,
     go,
+    h('p', { class: 'muted', text: 'We save your nickname and game progress so your teacher can help. We never save your photo, and your avatar look stays on this device.' }),
   );
   show(
     h('div', { class: 'center stack' }, h('h1', { text: 'Runway Rally' }), h('p', { class: 'jp-sub', 'aria-hidden': 'true', text: 'ランウェイ・ラリー ☆ ファッション × さんすう' }), h('p', { class: 'muted', text: 'Design fashion. Earn it with math.' }), h('div', { class: 'login-mascot' }, mascot())),
@@ -865,10 +866,10 @@ function blankify(str) {
 
 function tableModel(m) {
   const cols = m.head.length;
-  const cells = [];
-  for (const hd of m.head) cells.push(h('div', { class: 'tm-cell tm-head', text: hd }));
-  for (const row of m.rows) for (const c of row) cells.push(h('div', { class: `tm-cell ${String(c).includes('?') ? 'tm-ask' : ''}` }, blankify(c)));
-  const grid = h('div', { class: 'tm-grid pic', role: 'table', 'aria-label': 'Table of values' }, cells);
+  const row = (kids) => h('div', { class: 'tm-row', role: 'row' }, kids);
+  const rows = [row(m.head.map((hd) => h('div', { class: 'tm-cell tm-head', role: 'columnheader', text: hd })))];
+  for (const r of m.rows) rows.push(row(r.map((c) => h('div', { class: `tm-cell ${String(c).includes('?') ? 'tm-ask' : ''}`, role: 'cell' }, blankify(c)))));
+  const grid = h('div', { class: 'tm-grid pic', role: 'table', 'aria-label': 'Table of values' }, rows);
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   return h('div', {}, grid, m.note ? h('p', { class: 'tm-note', text: m.note }) : null);
 }
@@ -918,6 +919,8 @@ function taskScreen() {
   const hintBox = h('div', { class: 'hint-box', hidden: !state.hint }, state.hint ? `Hint: ${state.hint}` : '');
   const msg = h('div');
   const money = t.skill === 'percent' ? '$' : '';
+  let via = 'typed'; // 'choice' only while the answer is exactly what was tapped from the 3 options
+  let explained = false;
   const choiceBtns = (t.choices || []).map((v, i) =>
     h(
       'button',
@@ -925,16 +928,16 @@ function taskScreen() {
         class: `choice c${i + 1}`,
         type: 'button',
         'aria-pressed': 'false',
-        'aria-label': `Choice ${'ABC'[i]}: ${money}${v}`,
         'data-v': String(v),
         onclick: (e) => {
           if (state.busy) return;
           setInput(String(v));
+          via = 'choice';
           if (e.detail) e.currentTarget.blur();
         },
       },
-      h('span', { class: 'letter', 'aria-hidden': 'true', text: 'ABC'[i] }),
-      h('span', { class: 'val', text: `${money}${v}` }),
+      h('span', { class: 'letter', text: 'ABC'[i] }),
+      h('span', { class: 'val', text: ` ${money}${v}` }),
     ),
   );
   const syncChoices = () => {
@@ -951,6 +954,7 @@ function taskScreen() {
   };
   const press = (k) => {
     if (state.busy) return;
+    via = 'typed';
     if (k === 'back') return setInput(state.input.slice(0, -1));
     if (k === '.' && state.input.includes('.')) return;
     setInput(state.input + k);
@@ -962,6 +966,7 @@ function taskScreen() {
       try {
         const r = await api('/api/hint', { method: 'POST', body: { taskId: t.id } });
         state.hint = r.text;
+        syncCalc();
         hintBox.hidden = false;
         hintBox.textContent = `Hint ${r.level}: ${r.text}`;
         if (r.level >= 3) hintBtn.disabled = true;
@@ -979,7 +984,7 @@ function taskScreen() {
       state.busy = true;
       check.disabled = true;
       try {
-        const r = await api('/api/answer', { method: 'POST', body: { taskId: t.id, answer: state.input } });
+        const r = await api('/api/answer', { method: 'POST', body: { taskId: t.id, answer: state.input, via } });
         state.student = r.student;
         if (r.retry) {
           display.classList.add('shake');
@@ -1002,7 +1007,7 @@ function taskScreen() {
   const key = (label, k, extra = '') => h('button', { class: extra, 'aria-label': k === 'back' ? 'Delete' : label, onclick: (e) => { press(k); if (e.detail) e.currentTarget.blur(); }, text: label });
   const pad = h('div', { class: 'pad' }, ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => key(n, n)), key('.', '.'), key('0', '0'), key('⌫', 'back'));
 
-  const speak = 'speechSynthesis' in window ? h('button', { class: 'ghost', 'aria-label': 'Read the question aloud', text: '🔊 Read aloud', onclick: () => { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(t.prompt)); } }) : null;
+  const speak = 'speechSynthesis' in window ? h('button', { class: 'ghost', 'aria-label': 'Read aloud', text: '🔊 Read aloud', onclick: () => { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(t.prompt)); } }) : null;
 
   const dots = h('div', { class: 'progress', role: 'img', 'aria-label': `Task ${t.number} of ${t.of}` }, Array.from({ length: t.of }, (_, i) => h('span', { class: `dot ${i < t.number - 1 ? 'done' : i === t.number - 1 ? 'now' : ''}` })));
 
@@ -1023,29 +1028,46 @@ function taskScreen() {
     ? h('button', {
         class: 'ghost',
         'aria-expanded': 'false',
-        text: '🔍 Show me how',
-        onclick: (e) => {
+        text: '🔍 Show me how · uses a hint',
+        onclick: async (e) => {
+          if (e.detail) e.currentTarget.blur();
           const open = exBox.childNodes.length === 0;
+          if (open && !explained) {
+            try {
+              await api('/api/explain', { method: 'POST', body: { taskId: t.id } });
+              explained = true;
+              syncCalc();
+            } catch (err) {
+              return msg.replaceChildren(h('div', { class: 'feedback try', text: err.message }));
+            }
+          }
           exBox.replaceChildren(...(open ? [explainPanel(t)] : []));
           exBtn.setAttribute('aria-expanded', String(open));
           exBtn.textContent = open ? '🔍 Hide the explanation' : '🔍 Show me how';
-          if (e.detail) e.currentTarget.blur();
         },
       })
     : null;
   const calcBox = h('div');
-  const calcBtn = h('button', {
+  const policy = state.catalog?.calcPolicy || 'after_hint';
+  const calcOk = () => policy === 'always' || (policy === 'after_hint' && (Boolean(state.hint) || explained));
+  const calcBtn = policy === 'off' ? null : h('button', {
     'aria-expanded': 'false',
-    text: '🧮',
-    'aria-label': 'Open calculator',
+    text: calcOk() ? '🧮' : '🧮🔒',
+    'aria-label': calcOk() ? 'Open calculator' : 'Calculator locked until you take a hint',
     onclick: (e) => {
+      if (e.detail) e.currentTarget.blur();
+      if (!calcOk()) return msg.replaceChildren(h('div', { class: 'feedback try', text: 'The calculator unlocks after you take a hint or open Show me how. Try the setup first.' }));
       const open = calcBox.childNodes.length === 0;
-      calcBox.replaceChildren(...(open ? [calculator((v) => setInput(v))] : []));
+      calcBox.replaceChildren(...(open ? [calculator((v) => { via = 'typed'; setInput(v); })] : []));
       calcBtn.setAttribute('aria-expanded', String(open));
       calcBtn.classList.toggle('on', open);
-      if (e.detail) e.currentTarget.blur();
     },
   });
+  function syncCalc() {
+    if (!calcBtn || !calcOk()) return;
+    calcBtn.textContent = '🧮';
+    calcBtn.setAttribute('aria-label', 'Open calculator');
+  }
 
   const nodes = [
     h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Pause', onclick: () => homeScreen() }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })),

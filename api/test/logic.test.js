@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SKILL_IDS, makeTask, checkAnswer, parseNumber, mulberry32, THEMES } from '../src/skills.js';
 import { levelFor, updateMastery, pickSkill, chooseTheme, recordInterest, newInterest, isUnlocked } from '../src/adaptive.js';
-import { classSummary, newStudent, startCommission, nextTask, applyAnswer, giveHint, openPack, COMMISSION_LENGTH, PITY_LIMIT } from '../src/logic.js';
+import { classSummary, newStudent, startCommission, nextTask, applyAnswer, giveHint, giveExplain, openPack, COMMISSION_LENGTH, PITY_LIMIT } from '../src/logic.js';
 
 test('every generator yields integer answers and distinct hints for many seeds', () => {
   for (const skill of SKILL_IDS) {
@@ -225,4 +225,31 @@ test('a student who answers everything correctly reaches all 9 skills, unlocks i
   }
   assert.equal(touched.size, 9, [...touched].join());
   assert.ok(s.unlocks.length >= 10, `unlocked ${s.unlocks.length}`);
+});
+
+test('guessing from the 3 choices earns less than working it out; Show me how counts once as a hint', () => {
+  const rng = mulberry32(5);
+  const fresh = (id) => {
+    const s = newStudent({ id, classCode: 'ABC', nickname: id });
+    startCommission(s, { rng: mulberry32(9) });
+    return { s, task: nextTask(s, mulberry32(9)) };
+  };
+  const typed = fresh('t1');
+  const rT = applyAnswer(typed.s, typed.task, String(typed.task.answer), rng, 'typed');
+  const chose = fresh('t2');
+  const rC = applyAnswer(chose.s, chose.task, String(chose.task.answer), rng, 'choice');
+  assert.equal(rT.thread, 5);
+  assert.equal(rC.thread, 4);
+  assert.ok(rT.mastery > rC.mastery);
+
+  const ex = fresh('t3');
+  assert.equal(giveExplain(ex.task).counted, true);
+  assert.equal(giveExplain(ex.task).counted, false); // only once
+  assert.equal(ex.task.hintLevel, 0); // does not consume a hint text
+  const rE = applyAnswer(ex.s, ex.task, String(ex.task.answer), rng, 'typed');
+  assert.equal(rE.thread, 4);
+  const stacked = fresh('t4');
+  giveExplain(stacked.task);
+  const rS = applyAnswer(stacked.s, stacked.task, String(stacked.task.answer), rng, 'choice');
+  assert.equal(rS.thread, 3);
 });

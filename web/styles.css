@@ -204,7 +204,7 @@ label { display: grid; gap: 6px; font-weight: 600; }
 
 .items { display: grid; gap: 8px; }
 .item { display: flex; justify-content: space-between; gap: 10px; background: #fff; border-radius: 14px; padding: 10px 14px; }
-.item.locked { opacity: 0.5; }
+.item.locked { background: #efeaf9; border-style: dashed; }
 
 
 /* ---------- anime pop layer ---------- */
@@ -512,8 +512,8 @@ h1 { -webkit-text-stroke: 2px var(--ink2); paint-order: stroke fill; font-style:
 
 
 /* ---------- confidence bars, locks, goal, sets ---------- */
-.bar.is-locked { opacity: 0.6; }
-.bar .gse { font-size: 0.7rem; font-weight: 800; color: var(--violet); background: #efe6ff; border: 2px solid var(--ink2); border-radius: 6px; padding: 0 5px; margin-left: 4px; }
+.bar.is-locked .track { opacity: 0.55; }
+.bar .gse { font-size: 0.7rem; font-weight: 800; color: #5b1fd6; background: #efe6ff; border: 2px solid var(--ink2); border-radius: 6px; padding: 0 5px; margin-left: 4px; }
 .bar .need { font-size: 0.8rem; }
 .goal.hit { background: linear-gradient(135deg, #fff6c9, #ffe3f1); }
 .goal .fill { background: var(--rainbow); }
@@ -564,3 +564,6 @@ h1 { -webkit-text-stroke: 2px var(--ink2); paint-order: stroke fill; font-style:
 .photo-btn { display: grid; place-items: center; min-height: 52px; border-radius: 16px; border: 3px dashed #7a3cff; background: #f4ecff; font-weight: 800; cursor: pointer; position: relative; overflow: hidden; }
 .file-in { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
 .look-body { gap: 12px; }
+
+.tm-row { display: contents; }
+.runway-stage .crowd { color: #fff; }

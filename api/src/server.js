@@ -20,6 +20,7 @@ import {
   nextTask,
   publicTask,
   giveHint,
+  giveExplain,
   applyAnswer,
   classSummary,
 } from './logic.js';
@@ -45,15 +46,20 @@ const CATALOG = {
   skills: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].name])),
   standards: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].gse])),
   prereq: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].prereq])),
+  // Calculator: 'always', 'after_hint' (unlocks once the student takes a hint or opens Show me how), or 'off'.
+  calcPolicy: ['always', 'after_hint', 'off'].includes(process.env.CALC_POLICY) ? process.env.CALC_POLICY : 'after_hint',
 };
 
-// Placeholder nickname filter. Replace with a real moderation list before any pilot with students.
-const BLOCKLIST = [];
+// Basic nickname filter: profanity, sexual terms, slurs and harassment phrases, matched after undoing
+// common letter swaps (0->o, 1->i, 3->e, 4->a, 5->s, @->a, $->s) and dropping spaces/dashes.
+// It will occasionally reject an innocent name; the student just picks another. Teachers can also see every nickname.
+const BLOCKLIST = ['fuck', 'shit', 'bitch', 'cunt', 'dick', 'pussy', 'slut', 'whore', 'porn', 'sex', 'nude', 'nigg', 'fag', 'retard', 'rape', 'nazi', 'hitler', 'kys', 'suicid', 'penis', 'vagina', 'boob', 'tits'];
+const squash = (s) => s.toLowerCase().replace(/[0]/g, 'o').replace(/[1!|]/g, 'i').replace(/3/g, 'e').replace(/[4@]/g, 'a').replace(/[5$]/g, 's').replace(/[\s_-]/g, '');
 export function cleanNickname(raw) {
   if (typeof raw !== 'string') return null;
   const n = raw.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 20);
   if (n.length < 2) return null;
-  if (BLOCKLIST.some((w) => n.toLowerCase().includes(w))) return null;
+  if (BLOCKLIST.some((w) => squash(raw).includes(w))) return null;
   return n;
 }
 
@@ -255,11 +261,22 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         return send(res, 200, h);
       }
 
+      if (method === 'POST' && path === '/api/explain') {
+        const body = await readJson(req);
+        const task = await store.getTask(String(body.taskId));
+        if (!task || task.studentId !== student.id) throw new HttpError(404, 'task not found');
+        const r = giveExplain(task);
+        if (r.error) throw new HttpError(409, r.error);
+        await store.saveTask(task);
+        if (r.counted) await store.addEvent(student.id, 'explain', { skill: task.skill });
+        return send(res, 200, r);
+      }
+
       if (method === 'POST' && path === '/api/answer') {
         const body = await readJson(req);
         const task = await store.getTask(String(body.taskId));
         if (!task || task.studentId !== student.id) throw new HttpError(404, 'task not found');
-        const result = applyAnswer(student, task, body.answer, rng);
+        const result = applyAnswer(student, task, body.answer, rng, body.via === 'choice' ? 'choice' : 'typed');
         if (result.error) throw new HttpError(409, result.error);
         await store.saveTask(task);
         let next = null;

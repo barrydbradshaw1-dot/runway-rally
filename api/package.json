@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "migrate": "node src/migrate.js",
+    "purge": "node src/purge.js",
     "test": "node --test --test-concurrency=1 test/*.test.js"
   },
   "dependencies": {

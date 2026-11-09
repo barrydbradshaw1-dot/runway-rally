@@ -195,6 +195,14 @@ export function publicTask(task, commission) {
   };
 }
 
+// Opening "Show me how" counts as one hint, once per task. It does not use up a hint text.
+export function giveExplain(task) {
+  if (task.answered) return { error: 'task already answered' };
+  const first = !task.explained;
+  task.explained = true;
+  return { counted: first };
+}
+
 export function giveHint(task) {
   if (task.answered) return { error: 'task already answered' };
   task.hintLevel = Math.min(3, task.hintLevel + 1);
@@ -204,7 +212,8 @@ export function giveHint(task) {
 const PRAISE = ['Nailed it.', 'Clean work.', 'That is runway ready.', 'Exactly right.', 'You make it look easy.', 'Sharp. Really sharp.'];
 const ENCOURAGE = ['Not yet. Check the picture or take a hint, then go again.', 'Close. Rethink the setup and try another way.'];
 
-export function applyAnswer(student, task, raw, rng) {
+// via: 'choice' when the student tapped one of the 3 options (a 1-in-3 guess), 'typed' when they worked it out themselves.
+export function applyAnswer(student, task, raw, rng, via = 'typed') {
   if (task.answered) return { error: 'task already answered' };
   if (student.currentTaskId !== task.id) return { error: 'not the current task' };
   const c = student.commission;
@@ -216,7 +225,7 @@ export function applyAnswer(student, task, raw, rng) {
   }
 
   task.answered = true;
-  const effective = Math.min(3, task.hintLevel + (task.attempts - 1));
+  const effective = Math.min(3, task.hintLevel + (task.explained ? 1 : 0) + (task.attempts - 1) + (via === 'choice' ? 1 : 0));
   student.mastery[task.skill] = updateMastery(student.mastery[task.skill], correct, effective);
   student.wrongStreak[task.skill] = correct ? 0 : (student.wrongStreak[task.skill] || 0) + 1;
   student.stats.answered += 1;

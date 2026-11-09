@@ -54,6 +54,23 @@ export class MemoryStore {
   async listClass(classCode) {
     return [...this.students.values()].filter((s) => s.classCode === classCode).map((s) => healStudent(structuredClone(s)));
   }
+  // Deletion for privacy requests and retention. Returns how many students were removed.
+  // where: { studentId } | { classCode } | { inactiveDays }
+  async purge(where, { dryRun = false } = {}) {
+    const cutoff = where.inactiveDays ? Date.now() - where.inactiveDays * 86400000 : null;
+    const ids = [...this.students.values()]
+      .filter((s) => (where.studentId ? s.id === where.studentId : where.classCode ? s.classCode === where.classCode : cutoff !== null && Date.parse(s.lastActive || s.createdAt) < cutoff))
+      .map((s) => s.id);
+    if (dryRun) return ids.length;
+    for (const id of ids) {
+      this.students.delete(id);
+      for (const [h, sid] of this.byToken) if (sid === id) this.byToken.delete(h);
+      for (const [tid, tk] of this.tasks) if (tk.studentId === id) this.tasks.delete(tid);
+    }
+    this.events = this.events.filter((e) => !ids.includes(e.studentId));
+    if (where.classCode) this.classes.delete(where.classCode);
+    return ids.length;
+  }
   async close() {}
 }
 
@@ -139,6 +156,18 @@ export class PgStore {
   async listClass(classCode) {
     const r = await this.pool.query('SELECT data FROM students WHERE class_code = $1 ORDER BY created_at', [classCode]);
     return r.rows.map((x) => healStudent(x.data));
+  }
+  async purge(where, { dryRun = false } = {}) {
+    let cond;
+    let arg;
+    if (where.studentId) [cond, arg] = ['id = $1', where.studentId];
+    else if (where.classCode) [cond, arg] = ['class_code = $1', where.classCode];
+    else if (where.inactiveDays) [cond, arg] = ["updated_at < now() - make_interval(days => $1::int)", where.inactiveDays];
+    else throw new Error('purge needs studentId, classCode or inactiveDays');
+    if (dryRun) return Number((await this.pool.query(`SELECT count(*) AS n FROM students WHERE ${cond}`, [arg])).rows[0].n);
+    const r = await this.pool.query(`DELETE FROM students WHERE ${cond}`, [arg]); // tasks, events and tokens cascade
+    if (where.classCode) await this.pool.query('DELETE FROM classes WHERE code = $1', [where.classCode]);
+    return r.rowCount;
   }
   async close() {
     await this.pool?.end();
