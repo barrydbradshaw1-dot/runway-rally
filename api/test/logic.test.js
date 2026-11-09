@@ -144,3 +144,22 @@ test('class summary never flags a skill the student has not tried', () => {
   assert.ok(row.attempts[skill] >= 2);
   for (const k of Object.keys(row.attempts)) if (row.attempts[k] === 0) assert.ok(!row.needsHelpWith.includes(k));
 });
+
+test('every task shows the math and offers 3 distinct positive choices including the answer', () => {
+  for (const skill of SKILL_IDS) {
+    for (const level of [1, 2, 3]) {
+      for (const theme of THEMES) {
+        for (let seed = 1; seed <= 200; seed++) {
+          const t = makeTask(skill, level, theme, mulberry32(seed));
+          assert.equal(typeof t.math, 'string');
+          assert.ok(t.math.endsWith('?'));
+          assert.equal(t.choices.length, 3);
+          assert.equal(new Set(t.choices).size, 3, `${skill} L${level} seed ${seed}: ${t.choices}`);
+          assert.ok(t.choices.every((c) => Number.isInteger(c) && c > 0));
+          assert.equal(t.choices.filter((c) => c === t.answer).length, 1);
+          assert.equal(t.wrong, undefined);
+        }
+      }
+    }
+  }
+});

@@ -45,6 +45,8 @@ function fracPart(level, theme, rng) {
       : `A roll of ribbon is ${L} cm long. A trim uses ${n}/${d} of it. How many cm of trim is that?`;
   return {
     prompt,
+    math: `${n}/${d} × ${L} cm = ?`,
+    wrong: [k, L - n * k, n * k + k, n + k],
     answer: n * k,
     hints: [
       'Split the length into equal parts. The bottom number of the fraction tells you how many parts.',
@@ -66,6 +68,8 @@ function fracAdd(level, theme, rng) {
       : `A scarf pattern has ${L} stripes. ${n1}/${d} are gold and ${n2}/${d} are silver. How many stripes are gold or silver?`;
   return {
     prompt,
+    math: `(${n1}/${d} + ${n2}/${d}) × ${L} beads = ?`,
+    wrong: [k * n1, k * (n1 + n2) + k, L - k * (n1 + n2), k * n1 + n2],
     answer: k * (n1 + n2),
     hints: [
       'The fractions share the same bottom number, so you can add the top numbers.',
@@ -91,6 +95,8 @@ function ratio(level, theme, rng) {
       : `A dye mix needs ${a} drops of rose for every ${b} drops of gold. You use ${a * k} drops of rose. How many drops of gold?`;
   return {
     prompt,
+    math: `${a} : ${b} = ${a * k} : ?`,
+    wrong: [a * k + (b - a), k * b + b, k * b - b, b * 2],
     answer: k * b,
     hints: [
       'Figure out how many times the basic pattern repeats.',
@@ -111,6 +117,8 @@ function percent(level, theme, rng) {
       : `A silk scarf costs $${P}. The tag says ${pct}% off. What is the sale price in dollars?`;
   return {
     prompt,
+    math: `$${P} − (${pct}% × $${P}) = ?`,
+    wrong: [disc, P - pct, P + disc, P - disc / 2],
     answer: P - disc,
     hints: [
       'Find the discount first. A percent is a part out of 100.',
@@ -126,7 +134,26 @@ export function makeTask(skill, level, theme, rng) {
   const gen = GENERATORS[skill];
   if (!gen) throw new Error('unknown skill ' + skill);
   const lvl = Math.min(3, Math.max(1, level));
-  return { skill, level: lvl, theme, ...gen(lvl, theme, rng) };
+  const t = { skill, level: lvl, theme, ...gen(lvl, theme, rng) };
+  t.choices = buildChoices(t.answer, t.wrong, rng);
+  delete t.wrong;
+  return t;
+}
+
+// Three choices: the right answer plus two common mistakes (padded with near misses), shuffled.
+export function buildChoices(answer, wrong, rng) {
+  const ok = (v) => Number.isInteger(v) && v > 0 && v !== answer;
+  const pool = [...new Set(wrong.filter(ok))];
+  for (let i = 0; pool.length < 2; i++) {
+    for (const v of [answer + 1 + i, answer + 10 + i, answer - 1 - i]) if (ok(v) && !pool.includes(v) && pool.length < 2) pool.push(v);
+  }
+  const picked = pool.slice(0, 2);
+  const out = [answer, ...picked];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 export function parseNumber(raw) {

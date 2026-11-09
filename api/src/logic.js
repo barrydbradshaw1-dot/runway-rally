@@ -144,6 +144,8 @@ export function publicTask(task, commission) {
     level: task.level,
     theme: task.theme,
     prompt: task.prompt,
+    math: task.math,
+    choices: task.choices,
     number: commission.done + 1,
     of: commission.total,
   };

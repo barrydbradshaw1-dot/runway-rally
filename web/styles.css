@@ -345,3 +345,20 @@ label { display: grid; gap: 6px; font-weight: 600; }
 .calc-key.use { grid-column: span 2; background: linear-gradient(135deg, var(--hotpink), var(--violet)); color: #fff; border-color: #fff; box-shadow: 0 3px 0 #4a1fb0; }
 .calc-key:active { transform: translateY(2px) scale(0.95); }
 button.on { background: linear-gradient(135deg, #d9ffee, #fff6c9); border-color: var(--mint); }
+
+
+/* ---------- show the math + 3 choices ---------- */
+.mathline { text-align: center; font-size: 1.7rem; font-weight: 900; color: var(--ink); padding: 10px 12px; border-radius: 16px; background: linear-gradient(135deg, #fff6c9, #ffe3f1 50%, #d9f1ff); border: 3px dashed var(--hotpink); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.choice { display: grid; gap: 2px; justify-items: center; align-content: center; min-height: 84px; padding: 8px 6px; border-width: 3px; transition: transform 0.12s; }
+.choice .letter { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #fff; font-size: 0.85rem; font-weight: 900; color: var(--ink); border: 2px solid currentColor; }
+.choice .val { font-size: 1.6rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.choice.c1 { background: linear-gradient(160deg, #ffe3f1, #ffc2e0); border-color: #ff8fc8; box-shadow: 0 5px 0 #ff74b9; color: #8a0f52; }
+.choice.c2 { background: linear-gradient(160deg, #e0f5ff, #b8e6ff); border-color: #7fd0ff; box-shadow: 0 5px 0 #6cc3f5; color: #0b5a8a; }
+.choice.c3 { background: linear-gradient(160deg, #d9ffee, #9af0cd); border-color: #4fe0aa; box-shadow: 0 5px 0 #2fc98f; color: #07503a; }
+.choice .val { color: var(--ink); }
+.choice.picked { transform: translateY(-4px) scale(1.05); outline: 4px solid var(--violet); outline-offset: 2px; filter: saturate(1.3); }
+.choice.out { opacity: 0.4; text-decoration: line-through; filter: grayscale(0.8); box-shadow: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { .choice, .choice.picked { transition: none; } }
+
+[hidden] { display: none !important; }

@@ -456,9 +456,37 @@ function taskScreen() {
   const display = h('div', { class: 'display', role: 'status', 'aria-label': 'Your answer', text: state.input || '0' });
   const hintBox = h('div', { class: 'hint-box', hidden: !state.hint }, state.hint ? `Hint: ${state.hint}` : '');
   const msg = h('div');
+  const money = t.skill === 'percent' ? '$' : '';
+  const choiceBtns = (t.choices || []).map((v, i) =>
+    h(
+      'button',
+      {
+        class: `choice c${i + 1}`,
+        type: 'button',
+        'aria-pressed': 'false',
+        'aria-label': `Choice ${'ABC'[i]}: ${money}${v}`,
+        'data-v': String(v),
+        onclick: (e) => {
+          if (state.busy) return;
+          setInput(String(v));
+          if (e.detail) e.currentTarget.blur();
+        },
+      },
+      h('span', { class: 'letter', 'aria-hidden': 'true', text: 'ABC'[i] }),
+      h('span', { class: 'val', text: `${money}${v}` }),
+    ),
+  );
+  const syncChoices = () => {
+    for (const b of choiceBtns) {
+      const on = b.dataset.v === state.input;
+      b.classList.toggle('picked', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+  };
   const setInput = (v) => {
     state.input = v.slice(0, 7);
     display.textContent = state.input || '0';
+    syncChoices();
   };
   const press = (k) => {
     if (state.busy) return;
@@ -496,6 +524,7 @@ function taskScreen() {
           display.classList.add('shake');
           setTimeout(() => display.classList.remove('shake'), 400);
           msg.replaceChildren(h('div', { class: 'feedback try', text: r.feedback }));
+          for (const b of choiceBtns) if (b.dataset.v === state.input) { b.disabled = true; b.classList.add('out'); }
           setInput('');
         } else {
           resultScreen(r);
@@ -516,6 +545,18 @@ function taskScreen() {
 
   const dots = h('div', { class: 'progress', role: 'img', 'aria-label': `Task ${t.number} of ${t.of}` }, Array.from({ length: t.of }, (_, i) => h('span', { class: `dot ${i < t.number - 1 ? 'done' : i === t.number - 1 ? 'now' : ''}` })));
 
+  pad.hidden = true;
+  const typeBtn = h('button', {
+    class: 'ghost',
+    'aria-expanded': 'false',
+    text: '⌨️ Type it instead',
+    onclick: (e) => {
+      pad.hidden = !pad.hidden;
+      typeBtn.setAttribute('aria-expanded', String(!pad.hidden));
+      typeBtn.textContent = pad.hidden ? '⌨️ Type it instead' : '⌨️ Hide keypad';
+      if (e.detail) e.currentTarget.blur();
+    },
+  });
   const calcBox = h('div');
   const calcBtn = h('button', {
     'aria-expanded': 'false',
@@ -534,11 +575,13 @@ function taskScreen() {
     h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Pause', onclick: () => homeScreen() }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })),
     dots,
     state.story ? h('p', { class: 'story center', text: state.story }) : null,
-    h('div', { class: 'card stack pop' }, h('p', { class: 'prompt', text: t.prompt }), speak),
+    h('div', { class: 'card stack pop' }, h('p', { class: 'prompt', text: t.prompt }), t.math ? h('div', { class: 'mathline', 'aria-label': `The math: ${t.math}`, text: t.math }) : null, speak),
+    choiceBtns.length ? h('div', { class: 'choices', role: 'group', 'aria-label': 'Pick an answer' }, choiceBtns) : null,
     display,
     hintBox,
     msg,
     calcBox,
+    choiceBtns.length ? typeBtn : null,
     pad,
     h('div', { class: 'row' }, hintBtn, calcBtn, check),
   ];
