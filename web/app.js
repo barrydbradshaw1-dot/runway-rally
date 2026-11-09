@@ -511,6 +511,76 @@ function calculator(onUse) {
   return h('div', { class: 'calc card pop', role: 'group', 'aria-label': 'Calculator' }, h('div', { class: 'calc-title', text: '🧮 Scratch calculator' }), out, grid);
 }
 
+
+// ---------- friendlier math: stacked fractions + a "Show me how" panel (picture and steps) ----------
+function mathNodes(str) {
+  const out = [];
+  let last = 0;
+  for (const m of str.matchAll(/(\d+)\/(\d+)/g)) {
+    if (m.index > last) out.push(str.slice(last, m.index));
+    out.push(h('span', { class: 'frac', 'aria-hidden': 'true' }, h('span', { class: 'num', text: m[1] }), h('span', { class: 'den', text: m[2] })));
+    last = m.index + m[0].length;
+  }
+  if (last < str.length) out.push(str.slice(last));
+  return out;
+}
+
+const blank = (txt = '?') => h('span', { class: 'blank', text: txt });
+
+function pictureBar(m) {
+  const W = 300, X = 10, cell = W / m.parts;
+  const kids = [];
+  const shades = m.kind === 'add' ? [...Array(m.take[0]).fill('#ff8fc4'), ...Array(m.take[1]).fill('#7fd0ff')] : Array(m.take).fill('#ff8fc4');
+  for (let i = 0; i < m.parts; i++) {
+    kids.push(s('rect', { x: X + i * cell, y: 26, width: cell, height: 38, fill: shades[i] || '#fff', stroke: '#1a0f45', 'stroke-width': 2.5 }));
+    if (m.parts <= 12) kids.push(s('text', { x: X + i * cell + cell / 2, y: 50, 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 800, fill: '#1a0f45' }, document.createTextNode('?')));
+  }
+  kids.push(s('path', { d: `M${X} 76 v6 h${W} v-6`, fill: 'none', stroke: '#1a0f45', 'stroke-width': 2.5 }));
+  kids.push(s('text', { x: X + W / 2, y: 98, 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 800, fill: '#1a0f45' }, document.createTextNode(`whole = ${m.total} ${m.unit}`)));
+  kids.push(s('text', { x: X, y: 16, 'font-size': 12, 'font-weight': 700, fill: '#6a5aa8' }, document.createTextNode(`${m.parts} equal parts · each part = ? ${m.unit}`)));
+  return s('svg', { viewBox: '0 0 320 106', class: 'pic', role: 'img', 'aria-label': `A bar for ${m.total} ${m.unit} cut into ${m.parts} equal parts with the pieces you take shaded` }, kids);
+}
+
+function picturePercent(m) {
+  const W = 300, X = 10, dw = (W * m.pct) / 100;
+  const t = (x, y, txt, anchor = 'middle', fill = '#1a0f45') => s('text', { x, y, 'text-anchor': anchor, 'font-size': 13, 'font-weight': 800, fill }, document.createTextNode(txt));
+  return s('svg', { viewBox: '0 0 320 104', class: 'pic', role: 'img', 'aria-label': `A bar for the $${m.price} price. ${m.pct} percent of it is the discount.` },
+    s('rect', { x: X, y: 28, width: dw, height: 38, fill: '#ff8fc4', stroke: '#1a0f45', 'stroke-width': 2.5 }),
+    s('rect', { x: X + dw, y: 28, width: W - dw, height: 38, fill: '#9af0cd', stroke: '#1a0f45', 'stroke-width': 2.5 }),
+    t(X + dw / 2, 52, `${m.pct}%`), t(X + dw + (W - dw) / 2, 52, `${100 - m.pct}%`),
+    t(X + dw / 2, 20, 'discount', 'middle', '#b0125f'), t(X + dw + (W - dw) / 2, 20, 'you pay', 'middle', '#07503a'),
+    s('path', { d: `M${X} 76 v6 h${W} v-6`, fill: 'none', stroke: '#1a0f45', 'stroke-width': 2.5 }), t(X + W / 2, 98, `price = $${m.price} (100%)`));
+}
+
+function ratioTable(m) {
+  const cell = (c, cls = '') => h('div', { class: `rt-cell ${cls}` }, c);
+  return h('div', { class: 'ratio-table pic', role: 'table', 'aria-label': 'Ratio table' },
+    cell(m.left, 'rt-head a'), cell(m.right, 'rt-head b'), cell('', 'rt-gap'),
+    cell(String(m.a), 'a'), cell(String(m.b), 'b'), cell('1 pattern', 'rt-note'),
+    cell(String(m.given), 'a'), cell(blank(), 'b'), cell(h('span', {}, '× ', blank(), ' patterns'), 'rt-note'));
+}
+
+function stepsFor(m) {
+  const li = (...kids) => h('li', {}, ...kids);
+  if (m.kind === 'part') return [li(`Split ${m.total} ${m.unit} into ${m.parts} equal parts: ${m.total} ÷ ${m.parts} = `, blank(), ` ${m.unit} for each part.`), li(`You take ${m.take} parts: ${m.take} × `, blank(), ' = ', blank(), ` ${m.unit}.`)];
+  if (m.kind === 'add') return [li(`Add the slices: ${m.take[0]} + ${m.take[1]} = ${m.take[0] + m.take[1]} parts out of ${m.parts}.`), li(`One part is ${m.total} ÷ ${m.parts} = `, blank(), ` ${m.unit}.`), li(`${m.take[0] + m.take[1]} × `, blank(), ' = ', blank(), ` ${m.unit}.`)];
+  if (m.kind === 'ratio') return [li(`How many patterns fit? ${m.given} ÷ ${m.a} = `, blank(), ' patterns.'), li(`Each pattern needs ${m.b} ${m.right}: `, blank(), ` × ${m.b} = `, blank(), '.')];
+  return [li(`Discount: ${m.price} ÷ 100 × ${m.pct} = $`, blank(), '.'), li(`Sale price: $${m.price} − $`, blank(), ' = $', blank(), '.')];
+}
+
+function explainPanel(t) {
+  const m = t.model;
+  const body = h('div', { class: 'ex-body' });
+  const modes = { Picture: () => body.replaceChildren(m.kind === 'ratio' ? ratioTable(m) : m.kind === 'percent' ? picturePercent(m) : pictureBar(m)), Steps: () => body.replaceChildren(h('ol', { class: 'ex-steps' }, stepsFor(m))) };
+  const tabs = Object.keys(modes).map((name, i) => h('button', { class: `chip-btn ex-tab ${i === 0 ? 'on' : ''}`, type: 'button', 'aria-pressed': String(i === 0), text: name === 'Picture' ? '🖼️ Picture' : '🪜 Steps', onclick: (e) => {
+    modes[name]();
+    for (const b of tabs) { const on = b === e.currentTarget; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+    if (e.detail) e.currentTarget.blur();
+  } }));
+  modes.Picture();
+  return h('div', { class: 'card explain pop' }, h('div', { class: 'row between' }, h('strong', { text: 'Show me how' }), h('div', { class: 'row' }, tabs)), h('p', { class: 'plain', text: t.plain }), body, h('p', { class: 'muted', text: 'The ? boxes are for you to work out.' }));
+}
+
 function taskScreen() {
   const t = state.task;
   const display = h('div', { class: 'display', role: 'status', 'aria-label': 'Your answer', text: state.input || '0' });
@@ -617,6 +687,21 @@ function taskScreen() {
       if (e.detail) e.currentTarget.blur();
     },
   });
+  const exBox = h('div');
+  const exBtn = t.model
+    ? h('button', {
+        class: 'ghost',
+        'aria-expanded': 'false',
+        text: '🔍 Show me how',
+        onclick: (e) => {
+          const open = exBox.childNodes.length === 0;
+          exBox.replaceChildren(...(open ? [explainPanel(t)] : []));
+          exBtn.setAttribute('aria-expanded', String(open));
+          exBtn.textContent = open ? '🔍 Hide the explanation' : '🔍 Show me how';
+          if (e.detail) e.currentTarget.blur();
+        },
+      })
+    : null;
   const calcBox = h('div');
   const calcBtn = h('button', {
     'aria-expanded': 'false',
@@ -636,11 +721,13 @@ function taskScreen() {
     h('div', { class: 'chapter' }, h('span', { class: 'ch-num', text: `CHAPTER ${t.number}` }), h('span', { class: 'ch-name', text: (THEME_NAME[t.theme] || THEME_NAME.jewelry)[0] }), h('span', { class: 'ch-jp', 'aria-hidden': 'true', text: (THEME_NAME[t.theme] || THEME_NAME.jewelry)[1] })),
     dots,
     h('div', { class: 'mascot-row' }, mascot(), h('div', { class: 'mascot-bubble', text: state.story || TIPS[(t.number - 1) % TIPS.length] })),
-    h('div', { class: 'card stack pop' }, h('p', { class: 'prompt', text: t.prompt }), t.math ? h('div', { class: 'mathline', 'aria-label': `The math: ${t.math}`, text: t.math }) : null, speak),
+    h('div', { class: 'card stack pop' }, h('p', { class: 'prompt', text: t.prompt }), t.math ? h('div', { class: 'mathline', role: 'img', 'aria-label': `The math: ${t.math}` }, mathNodes(t.math)) : null, t.plain ? h('p', { class: 'plain-line', text: `In words: ${t.plain}` }) : null, speak),
     choiceBtns.length ? h('div', { class: 'choices', role: 'group', 'aria-label': 'Pick an answer' }, choiceBtns) : null,
     display,
     hintBox,
     msg,
+    exBtn,
+    exBox,
     calcBox,
     choiceBtns.length ? typeBtn : null,
     pad,

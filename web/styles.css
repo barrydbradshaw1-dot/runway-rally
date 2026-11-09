@@ -487,3 +487,25 @@ h1 { -webkit-text-stroke: 2px var(--ink2); paint-order: stroke fill; font-style:
 .impact { margin: 22px 0 6px; }
 .impact .rays { inset: -4px 6px; }
 .henshin .hen-title { font-size: 2.5rem; }
+
+
+/* ---------- friendlier math ---------- */
+.mathline { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 8px; line-height: 1.2; }
+.frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1; vertical-align: middle; margin: 0 2px; font-size: 1.05em; }
+.frac .num { padding: 0 6px 3px; border-bottom: 4px solid var(--ink2); }
+.frac .den { padding: 3px 6px 0; }
+.plain-line { font-size: 0.98rem; font-weight: 700; color: var(--soft); background: #fff8d6; border-left: 6px solid var(--gold); border-radius: 10px; padding: 8px 12px; }
+
+.explain { background: linear-gradient(160deg, #f4ecff, #e8f7ff); display: grid; gap: 10px; }
+.explain .plain { font-weight: 700; }
+.ex-body { background: #fff; border: 3px solid var(--ink2); border-radius: 14px; padding: 10px; }
+.pic { width: 100%; height: auto; display: block; }
+.ex-steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; font-weight: 700; font-size: 1.02rem; line-height: 1.6; }
+.blank { display: inline-block; min-width: 30px; text-align: center; border-bottom: 3px dashed var(--hotpink); color: var(--hotpink); font-weight: 900; margin: 0 2px; padding: 0 4px; }
+.ratio-table { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 6px; align-items: center; text-align: center; font-weight: 800; }
+.rt-cell { padding: 8px 4px; border-radius: 10px; }
+.rt-head { font-size: 0.85rem; color: #fff; text-transform: capitalize; }
+.rt-head.a, .rt-cell.a:not(.rt-head) { background: #ffd0e8; } .rt-head.a { background: var(--hotpink); }
+.rt-head.b, .rt-cell.b:not(.rt-head) { background: #cdeeff; } .rt-head.b { background: var(--sky); }
+.rt-cell:not(.rt-head):not(.rt-note):not(.rt-gap) { font-size: 1.4rem; border: 3px solid var(--ink2); }
+.rt-note { font-size: 0.82rem; color: var(--soft); text-align: left; }

@@ -163,3 +163,21 @@ test('every task shows the math and offers 3 distinct positive choices including
     }
   }
 });
+
+test('every task has plain words and a model for the Show me how panel', () => {
+  const kinds = new Set();
+  for (const skill of SKILL_IDS) {
+    for (const level of [1, 2, 3]) {
+      for (const theme of THEMES) {
+        for (let seed = 1; seed <= 100; seed++) {
+          const t = makeTask(skill, level, theme, mulberry32(seed));
+          assert.ok(t.plain.length > 10);
+          assert.ok(['part', 'add', 'ratio', 'percent'].includes(t.model.kind));
+          kinds.add(t.model.kind);
+          assert.ok(!t.math.includes('×'), 'math reads as "of", not a cross');
+        }
+      }
+    }
+  }
+  assert.equal(kinds.size, 4);
+});

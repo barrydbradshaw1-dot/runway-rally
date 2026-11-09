@@ -41,17 +41,19 @@ function fracPart(level, theme, rng) {
   const L = d * k;
   const prompt =
     theme === 'jewelry'
-      ? `A chain is ${L} cm long. The clasp section uses ${n}/${d} of it. How many cm is the clasp section?`
-      : `A roll of ribbon is ${L} cm long. A trim uses ${n}/${d} of it. How many cm of trim is that?`;
+      ? `A chain is ${L} inches long. The clasp section uses ${n}/${d} of it. How many inches is the clasp section?`
+      : `A roll of ribbon is ${L} inches long. A trim uses ${n}/${d} of it. How many inches of trim is that?`;
   return {
     prompt,
-    math: `${n}/${d} × ${L} cm = ?`,
+    math: `${n}/${d} of ${L} inches = ?`,
+    plain: `Cut ${L} inches into ${d} equal pieces. Take ${n} of those pieces.`,
+    model: { kind: 'part', total: L, parts: d, take: n, unit: 'inches' },
     wrong: [k, L - n * k, n * k + k, n + k],
     answer: n * k,
     hints: [
       'Split the length into equal parts. The bottom number of the fraction tells you how many parts.',
       `Divide ${L} by ${d} to find the size of one part: ${L} ÷ ${d} = ${k}.`,
-      `One part is ${k} cm and you need ${n} of them: ${n} × ${k} = ${n * k}.`,
+      `One part is ${k} inches and you need ${n} of them: ${n} × ${k} = ${n * k}.`,
     ],
   };
 }
@@ -68,7 +70,9 @@ function fracAdd(level, theme, rng) {
       : `A scarf pattern has ${L} stripes. ${n1}/${d} are gold and ${n2}/${d} are silver. How many stripes are gold or silver?`;
   return {
     prompt,
-    math: `(${n1}/${d} + ${n2}/${d}) × ${L} beads = ?`,
+    math: `(${n1}/${d} + ${n2}/${d}) of ${L} ${theme === 'jewelry' ? 'beads' : 'stripes'} = ?`,
+    plain: `Cut ${L} ${theme === 'jewelry' ? 'beads' : 'stripes'} into ${d} equal groups. Take ${n1} groups, then ${n2} more groups.`,
+    model: { kind: 'add', total: L, parts: d, take: [n1, n2], unit: theme === 'jewelry' ? 'beads' : 'stripes' },
     wrong: [k * n1, k * (n1 + n2) + k, L - k * (n1 + n2), k * n1 + n2],
     answer: k * (n1 + n2),
     hints: [
@@ -96,6 +100,8 @@ function ratio(level, theme, rng) {
   return {
     prompt,
     math: `${a} : ${b} = ${a * k} : ?`,
+    plain: `The pattern is ${a} ${theme === 'jewelry' ? 'gold' : 'rose'} for every ${b} ${theme === 'jewelry' ? 'silver' : 'gold'}. How many times does the pattern repeat to reach ${a * k}?`,
+    model: { kind: 'ratio', a, b, given: a * k, left: theme === 'jewelry' ? 'gold beads' : 'rose drops', right: theme === 'jewelry' ? 'silver beads' : 'gold drops' },
     wrong: [a * k + (b - a), k * b + b, k * b - b, b * 2],
     answer: k * b,
     hints: [
@@ -117,7 +123,9 @@ function percent(level, theme, rng) {
       : `A silk scarf costs $${P}. The tag says ${pct}% off. What is the sale price in dollars?`;
   return {
     prompt,
-    math: `$${P} − (${pct}% × $${P}) = ?`,
+    math: `$${P} − (${pct}% of $${P}) = ?`,
+    plain: `Find ${pct}% of $${P}. That is the discount. Take it off the price.`,
+    model: { kind: 'percent', price: P, pct },
     wrong: [disc, P - pct, P + disc, P - disc / 2],
     answer: P - disc,
     hints: [
