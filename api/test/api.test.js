@@ -169,3 +169,18 @@ test('admin console page is served', async () => {
     server.close();
   }
 });
+
+test('mobile app origins get CORS on the game API only, never on admin', async () => {
+  const { server, call } = await boot();
+  try {
+    const pre = await call('/api/session', { method: 'OPTIONS', headers: { origin: 'capacitor://localhost', 'access-control-request-method': 'POST' } });
+    assert.equal(pre.status, 204);
+    assert.equal(pre.headers.get('access-control-allow-origin'), 'capacitor://localhost');
+    const evil = await call('/api/session', { method: 'OPTIONS', headers: { origin: 'https://evil.example' } });
+    assert.equal(evil.headers.get('access-control-allow-origin'), null);
+    const admin = await call('/api/admin/me', { headers: { origin: 'capacitor://localhost' } });
+    assert.equal(admin.headers.get('access-control-allow-origin'), null);
+  } finally {
+    server.close();
+  }
+});

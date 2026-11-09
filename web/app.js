@@ -82,8 +82,10 @@ function show(...nodes) {
   window.scrollTo(0, 0);
 }
 
+// Empty in the browser (same origin). The installed mobile app sets it to the live server in config.js.
+const API_BASE = (typeof window !== 'undefined' && window.RR?.api) || '';
 async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     method,
     headers: { 'content-type': 'application/json', ...(state.token ? { authorization: `Bearer ${state.token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -1204,6 +1206,6 @@ function cardsScreen() {
 }
 
 // ---------- boot ----------
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator && !window.RR?.app) navigator.serviceWorker.register('/sw.js').catch(() => {});
 if (state.token) homeScreen();
 else loginScreen();

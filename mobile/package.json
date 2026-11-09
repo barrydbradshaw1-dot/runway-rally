@@ -1,0 +1,25 @@
+{
+  "name": "runway-rally-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capacitor wrapper that packages the Runway Rally web client as Android and iOS apps.",
+  "scripts": {
+    "build:web": "node build-www.mjs",
+    "sync": "npm run build:web && cap sync",
+    "android": "npm run sync && cap open android",
+    "ios": "npm run sync && cap open ios",
+    "assets": "node make-icons.mjs && capacitor-assets generate --android --ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0",
+    "sharp": "^0.33.5"
+  }
+}

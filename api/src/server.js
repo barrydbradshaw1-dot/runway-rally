@@ -50,6 +50,9 @@ const CATALOG = {
   calcPolicy: ['always', 'after_hint', 'off'].includes(process.env.CALC_POLICY) ? process.env.CALC_POLICY : 'after_hint',
 };
 
+// Origins the installed mobile app runs from (Capacitor defaults). Override with CORS_ORIGINS="a,b".
+const APP_ORIGINS = new Set((process.env.CORS_ORIGINS || 'capacitor://localhost,https://localhost,http://localhost').split(',').map((s) => s.trim()).filter(Boolean));
+
 // Basic nickname filter: profanity, sexual terms, slurs and harassment phrases, matched after undoing
 // common letter swaps (0->o, 1->i, 3->e, 4->a, 5->s, @->a, $->s) and dropping spaces/dashes.
 // It will occasionally reject an innocent name; the student just picks another. Teachers can also see every nickname.
@@ -389,6 +392,19 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       if (url.pathname === '/healthz') return send(res, 200, { ok: true });
       if (url.pathname.startsWith('/lti/')) return await ltiRoute(req, res, url);
       if (url.pathname.startsWith('/api/')) {
+        // The installed mobile app calls this API from its own origin. Allow only those origins, and never the teacher console.
+        const origin = req.headers.origin;
+        if (origin && APP_ORIGINS.has(origin) && !url.pathname.startsWith('/api/admin')) {
+          res.setHeader('access-control-allow-origin', origin);
+          res.setHeader('vary', 'origin');
+          res.setHeader('access-control-allow-headers', 'authorization, content-type');
+          res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+          res.setHeader('access-control-max-age', '600');
+          if (req.method === 'OPTIONS') {
+            res.writeHead(204);
+            return res.end();
+          }
+        }
         const ip = clientIp(req);
         if (limited(ip, 600)) throw new HttpError(429, 'slow down a little');
         return await api(req, res, url);

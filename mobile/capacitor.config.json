@@ -1,0 +1,12 @@
+{
+  "appId": "com.nexusdataengineering.runwayrally",
+  "appName": "Runway Rally",
+  "webDir": "www",
+  "backgroundColor": "#ffe3f4",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "always" },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#ff2d95", "showSpinner": false },
+    "StatusBar": { "style": "DARK", "backgroundColor": "#ff2d95" }
+  }
+}
