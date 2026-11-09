@@ -98,3 +98,13 @@ td.none { background: #eef0f4; }
 .stat { animation: pop 0.45s cubic-bezier(.2,1.4,.4,1) backwards; }
 .stat:nth-child(2) { animation-delay: 0.05s; } .stat:nth-child(3) { animation-delay: 0.1s; } .stat:nth-child(4) { animation-delay: 0.15s; } .stat:nth-child(5) { animation-delay: 0.2s; }
 @media (prefers-reduced-motion: reduce) { .stat { animation: none; } .stat:hover, .group:hover { transform: none; } }
+
+
+/* ---- max anime (console): ink outlines + screentone, still very readable ---- */
+.stat, .panel, .group { border: 4px solid var(--ink2) !important; outline: 0 !important; box-shadow: 5px 5px 0 var(--hotpink) !important; border-radius: 16px 24px 16px 24px; }
+.stat:nth-child(even), .group:nth-child(even) { box-shadow: 5px 5px 0 var(--sky) !important; }
+.chip { border: 2px solid var(--ink2); }
+#admin h1 { transform: rotate(-1deg); -webkit-text-stroke: 1.5px var(--ink2); paint-order: stroke fill; font-style: italic; text-shadow: 2px 2px 0 var(--ink2); }
+#admin h1::after { content: " ✦"; }
+#admin::before { height: 10px; border: 2px solid var(--ink2); }
+.head button { border: 3px solid var(--ink2); box-shadow: 0 3px 0 var(--ink2); }

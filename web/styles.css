@@ -362,3 +362,128 @@ button.on { background: linear-gradient(135deg, #d9ffee, #fff6c9); border-color:
 @media (prefers-reduced-motion: reduce) { .choice, .choice.picked { transition: none; } }
 
 [hidden] { display: none !important; }
+
+
+/* =====================================================================
+   MAX ANIME LAYER: manga ink, screentone, speed lines, SFX, mascot
+   ===================================================================== */
+:root { --ink2: #1a0f45; --tone: #ff4fb033; }
+body {
+  font-family: "Trebuchet MS", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", Meiryo, system-ui, sans-serif;
+  position: relative;
+}
+/* screentone dots over the whole page + corner speed lines */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(circle, #ff4fb040 1.4px, transparent 1.7px) 0 0 / 11px 11px,
+    radial-gradient(circle, #27b8ff30 1.2px, transparent 1.5px) 5px 5px / 11px 11px;
+  -webkit-mask-image: linear-gradient(160deg, #000 0%, transparent 38%, transparent 70%, #000 100%);
+  mask-image: linear-gradient(160deg, #000 0%, transparent 38%, transparent 70%, #000 100%);
+}
+#app { position: relative; z-index: 1; }
+
+/* manga panel cards: thick ink outline + hard offset shadow */
+.card {
+  border: 4px solid var(--ink2);
+  outline: 0;
+  border-radius: 18px 26px 18px 26px;
+  box-shadow: 6px 6px 0 var(--hotpink);
+  background: #fff;
+}
+.card:nth-of-type(even) { box-shadow: 6px 6px 0 var(--sky); border-radius: 26px 18px 26px 18px; }
+button { border: 3px solid var(--ink2); box-shadow: 0 4px 0 var(--ink2); font-weight: 800; }
+button.primary { border-color: var(--ink2); box-shadow: 0 5px 0 var(--ink2); text-shadow: 0 2px 0 #1a0f4588; letter-spacing: 0.03em; }
+button.ghost { border: 0; box-shadow: none; }
+.pill { border: 3px solid var(--ink2); box-shadow: 3px 3px 0 var(--ink2); }
+input[type="text"] { border: 3px solid var(--ink2); box-shadow: 3px 3px 0 var(--sky); }
+.display { border: 3px solid var(--ink2); box-shadow: 4px 4px 0 var(--gold); }
+.tile { border: 3px solid var(--ink2) !important; box-shadow: 4px 5px 0 var(--ink2) !important; position: relative; }
+.tile .jp { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; opacity: 0.75; }
+.tcard { border: 4px solid var(--ink2) !important; box-shadow: 4px 4px 0 var(--hotpink); }
+.item { border: 3px solid var(--ink2); box-shadow: 3px 3px 0 var(--line); }
+
+/* title: katakana tagline + SFX-style outline */
+h1 { -webkit-text-stroke: 2px var(--ink2); paint-order: stroke fill; font-style: italic; transform: rotate(-2deg); text-shadow: 3px 3px 0 var(--ink2); filter: none; }
+.jp-sub { font-weight: 800; letter-spacing: 0.1em; color: var(--violet); font-size: 0.95rem; }
+.login-mascot { display: grid; place-items: center; }
+.login-mascot .mascot { width: 120px; }
+
+/* avatar stage: speed-line burst behind her */
+.avatar-wrap {
+  background:
+    radial-gradient(circle at 50% 46%, #fff 0 24%, transparent 25%),
+    repeating-conic-gradient(from 0deg at 50% 46%, #ffd6ee 0deg 6deg, #fff 6deg 12deg, #d6ecff 12deg 18deg, #fff 18deg 24deg),
+    #fff;
+  animation: spinlines 40s linear infinite;
+}
+.avatar-wrap > * { animation: none; }
+@keyframes spinlines { to { background-position: 0 0, 0 0, 0 0; } }
+.avatar-wrap::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, #ff4fb028 1.6px, transparent 2px) 0 0 / 10px 10px; pointer-events: none; }
+.avatar { filter: drop-shadow(3px 4px 0 #1a0f4533); }
+.sparkle { font-size: 1.7rem; text-shadow: 0 0 0 #fff, 2px 2px 0 #1a0f4522; }
+
+/* chapter header (manga chapter card) */
+.chapter { display: flex; align-items: center; gap: 10px; justify-content: center; font-weight: 900; }
+.chapter .ch-num { background: var(--ink2); color: #fff; padding: 3px 12px; border-radius: 4px; transform: skewX(-12deg); letter-spacing: 0.12em; font-size: 0.8rem; }
+.chapter .ch-name { font-size: 1.1rem; color: var(--ink); font-style: italic; }
+.chapter .ch-jp { font-size: 0.78rem; color: var(--violet); letter-spacing: 0.14em; }
+
+/* mascot Mochi + speech bubble */
+.mascot-row { display: flex; align-items: center; gap: 8px; }
+.mascot { width: 84px; flex: none; animation: mbounce 2s ease-in-out infinite; transform-origin: 50% 100%; overflow: visible; }
+.mo-tail { transform-box: fill-box; transform-origin: 0% 100%; animation: wag 1.4s ease-in-out infinite; }
+@keyframes mbounce { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-5px) scale(0.97, 1.04); } }
+@keyframes wag { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(14deg); } }
+.mascot-bubble { position: relative; flex: 1; background: #fff; border: 3px solid var(--ink2); border-radius: 18px; padding: 8px 12px; font-weight: 800; font-size: 0.92rem; box-shadow: 3px 3px 0 var(--gold); }
+.mascot-bubble::before { content: ""; position: absolute; left: -12px; top: 50%; margin-top: -9px; border: 9px solid transparent; border-right-color: var(--ink2); border-left: 0; }
+.mascot-bubble::after { content: ""; position: absolute; left: -7px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-right-color: #fff; border-left: 0; }
+.story { display: none; }
+
+/* question card = manga panel with screentone corner */
+.prompt { font-size: 1.2rem; }
+.mathline { border: 3px solid var(--ink2); border-style: solid; box-shadow: 4px 4px 0 var(--hotpink); background: linear-gradient(135deg, #fff6c9, #ffe3f1 50%, #d9f1ff); transform: rotate(-0.6deg); }
+.choice { border: 3px solid var(--ink2) !important; box-shadow: 0 5px 0 var(--ink2) !important; }
+.choice.picked { outline: 4px solid var(--hotpink); box-shadow: 0 5px 0 var(--ink2), 0 0 24px #ff4fb099 !important; }
+.dot { border: 2px solid var(--ink2); }
+
+/* impact panel: starburst + SFX word */
+.impact { position: relative; display: grid; place-items: center; min-height: 118px; margin: 4px 0 -4px; overflow: visible; }
+.impact .rays { position: absolute; inset: -6px -8px; z-index: 0; clip-path: polygon(50% 0, 58% 22%, 82% 8%, 76% 34%, 100% 40%, 80% 56%, 96% 80%, 70% 74%, 62% 100%, 50% 80%, 38% 100%, 30% 74%, 4% 80%, 20% 56%, 0 40%, 24% 34%, 18% 8%, 42% 22%); animation: burstin 0.5s cubic-bezier(.2,1.6,.4,1), spin 14s linear infinite 0.5s; }
+.impact.win .rays { background: repeating-conic-gradient(#ffc21a 0 10deg, #ff4fb0 10deg 20deg); }
+.impact.try .rays { background: repeating-conic-gradient(#7a3cff 0 10deg, #27b8ff 10deg 20deg); }
+.impact .sfx { position: relative; z-index: 1; font-size: 2.3rem; font-weight: 1000; font-style: italic; color: #fff; -webkit-text-stroke: 3px var(--ink2); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--ink2); letter-spacing: 0.04em; transform: rotate(-6deg); animation: sfxpop 0.55s cubic-bezier(.2,1.8,.4,1); }
+.impact .jp { position: absolute; z-index: 1; bottom: 14px; right: 14%; background: var(--ink2); color: #fff; padding: 1px 10px; font-size: 0.8rem; font-weight: 800; transform: skewX(-10deg); }
+@keyframes burstin { from { transform: scale(0.2) rotate(-40deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes sfxpop { 0% { transform: scale(0.2) rotate(-20deg); opacity: 0; } 70% { transform: scale(1.25) rotate(-6deg); } 100% { transform: scale(1) rotate(-6deg); opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* HENSHIN: transformation overlay for new items */
+.henshin { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; align-content: center; gap: 6px; text-align: center; background: radial-gradient(circle, #fff 0 12%, #ffd6ee 30%, #b894ff 70%, #5a2ed6 100%); animation: flash 0.35s ease-out, hout 0.5s 2.1s forwards; cursor: pointer; overflow: hidden; }
+.henshin .speed { position: absolute; inset: -50%; background: repeating-conic-gradient(from 0deg, #fff 0deg 3deg, transparent 3deg 9deg); opacity: 0.75; animation: spin 6s linear infinite; }
+.henshin .ring { position: absolute; width: 260px; height: 260px; border-radius: 50%; border: 10px dashed #ffc21a; box-shadow: 0 0 0 8px #fff, 0 0 40px #ffc21a; animation: spin 3s linear infinite, ringin 0.6s cubic-bezier(.2,1.6,.4,1); }
+.henshin .hen-title { position: relative; font-size: 3rem; font-weight: 1000; font-style: italic; color: #fff; -webkit-text-stroke: 4px var(--ink2); paint-order: stroke fill; text-shadow: 5px 5px 0 var(--ink2); animation: sfxpop 0.6s 0.15s cubic-bezier(.2,1.8,.4,1) backwards; }
+.henshin .hen-sub { position: relative; font-size: 1.3rem; font-weight: 900; background: var(--ink2); color: #ffe36e; padding: 4px 16px; transform: skewX(-8deg); animation: pop 0.4s 0.4s backwards; }
+.henshin .hen-jp { position: relative; font-weight: 800; color: #fff; text-shadow: 2px 2px 0 var(--ink2); animation: pop 0.4s 0.6s backwards; }
+@keyframes flash { from { filter: brightness(3); } to { filter: none; } }
+@keyframes ringin { from { transform: scale(0); } }
+@keyframes hout { to { opacity: 0; visibility: hidden; } }
+
+/* holo foil on rare+ cards */
+.tcard.rare, .tcard.epic, .tcard.legendary { background-image: linear-gradient(115deg, transparent 30%, #ffffffaa 45%, transparent 60%), linear-gradient(160deg, #fff, #f6f0ff); background-size: 250% 100%, 100% 100%; animation: foil 3.2s linear infinite; }
+.tcard.legendary { background-image: linear-gradient(115deg, transparent 30%, #fff 45%, transparent 60%), linear-gradient(135deg, #fff6c9, #ffd6ee, #d9f1ff); }
+@keyframes foil { from { background-position: 150% 0, 0 0; } to { background-position: -100% 0, 0 0; } }
+
+/* topbar + feedback in ink style */
+.feedback { border: 3px solid var(--ink2) !important; box-shadow: 4px 4px 0 var(--ink2); position: relative; z-index: 1; }
+.unlock { border: 3px solid var(--ink2); border-style: dashed; }
+.bar .track { border: 2px solid var(--ink2); background: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-wrap, .mascot, .mo-tail, .impact .rays, .impact .sfx, .henshin, .henshin .speed, .henshin .ring, .henshin .hen-title, .henshin .hen-sub, .tcard.rare, .tcard.epic, .tcard.legendary { animation: none; }
+  .henshin { animation: hout 0.3s 1.5s forwards; }
+}
+
+.impact { margin: 22px 0 6px; }
+.impact .rays { inset: -4px 6px; }
+.henshin .hen-title { font-size: 2.5rem; }

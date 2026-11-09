@@ -125,7 +125,7 @@ const EYES = ['#ff4fb0', '#27b8ff', '#16d9a0', '#7a3cff', '#ff8a3d', '#ffc21a'];
 const style = { hair: Number(store.get('rr_hair')) || 0, eyes: Number(store.get('rr_eyes')) || 1, off: new Set(JSON.parse(store.get('rr_off') || '[]')) };
 const worn = (id) => has(id) && !style.off.has(id);
 
-function avatar() {
+function avatar(mood = 'normal') {
   const hr = HAIR[style.hair % HAIR.length];
   const eye = EYES[style.eyes % EYES.length];
   const defs = s(
@@ -142,6 +142,13 @@ function avatar() {
   const face = [];
 
   // long back hair + twin ribbons
+  // twin tails + ahoge (anime hair antenna)
+  for (const m of [1, -1]) {
+    const X = (x) => (m === 1 ? x : 200 - x);
+    back.push(s('path', { d: `M${X(46)} 70 Q${X(8)} 116 ${X(22)} 190 Q${X(34)} 214 ${X(50)} 192 Q${X(42)} 140 ${X(58)} 98 Z`, fill: hr.main }));
+    back.push(s('path', { d: `M${X(40)} 100 Q${X(20)} 140 ${X(28)} 184`, fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.7 }));
+  }
+  back.push(s('path', { d: 'M100 34 Q94 10 110 8 Q124 8 114 24', fill: 'none', stroke: hr.main, 'stroke-width': 6, 'stroke-linecap': 'round' }));
   back.push(s('path', { d: 'M44 90 Q36 190 60 232 Q76 216 74 150 L126 150 Q124 216 140 232 Q164 190 156 90 Q150 30 100 28 Q50 30 44 90 Z', fill: hr.shade }));
   if (worn('couture-cape')) back.push(s('path', { d: 'M50 132 Q100 118 150 132 L176 262 Q100 280 24 262 Z', fill: 'url(#gCape)' }));
 
@@ -188,20 +195,35 @@ function avatar() {
     face.push(s('path', { d: `M${x} 70 l${x < 100 ? -2 : 2} 18 l${x < 100 ? -16 : 16} 0 z`, fill: '#ff8a3d' }));
     face.push(s('circle', { cx: x, cy: 70, r: 5, fill: '#ffc21a' }));
   }
-  // big sparkly anime eyes (blink as a group)
+  // big sparkly anime eyes (blink as a group); mood swaps them for happy arcs
   const eyes = [];
-  for (const x of [78, 122]) {
-    eyes.push(s('ellipse', { cx: x, cy: 100, rx: 14, ry: 17, fill: '#fff' }));
-    eyes.push(s('ellipse', { cx: x, cy: 102, rx: 11, ry: 15, fill: 'url(#gEye)' }));
-    eyes.push(s('ellipse', { cx: x, cy: 104, rx: 5, ry: 8, fill: '#2a1a5e' }));
-    eyes.push(s('circle', { cx: x + 4, cy: 94, r: 4.6, fill: '#fff' }));
-    eyes.push(s('circle', { cx: x - 4, cy: 109, r: 2.4, fill: '#fff' }));
-    eyes.push(s('path', { d: `M${x - 15} 90 Q${x} 80 ${x + 15} 90`, fill: 'none', stroke: '#2a1a5e', 'stroke-width': 3.5, 'stroke-linecap': 'round' }));
+  const sparkle4 = (x, y, r, fill = '#fff') => s('path', { d: `M${x} ${y - r} Q${x + r * 0.2} ${y - r * 0.2} ${x + r} ${y} Q${x + r * 0.2} ${y + r * 0.2} ${x} ${y + r} Q${x - r * 0.2} ${y + r * 0.2} ${x - r} ${y} Q${x - r * 0.2} ${y - r * 0.2} ${x} ${y - r} Z`, fill });
+  for (const [x, dir] of [[78, -1], [122, 1]]) {
+    if (mood === 'happy') {
+      eyes.push(s('path', { d: `M${x - 13} 104 Q${x} 86 ${x + 13} 104`, fill: 'none', stroke: '#2a1a5e', 'stroke-width': 5, 'stroke-linecap': 'round' }));
+      continue;
+    }
+    eyes.push(s('ellipse', { cx: x, cy: 100, rx: 15, ry: 19, fill: '#fff' }));
+    eyes.push(s('ellipse', { cx: x, cy: 103, rx: 12, ry: 17, fill: 'url(#gEye)' }));
+    eyes.push(s('ellipse', { cx: x, cy: 105, rx: 5.5, ry: 9, fill: '#1a0f45' }));
+    eyes.push(s('ellipse', { cx: x + 4, cy: 94, rx: 5, ry: 5.5, fill: '#fff' }));
+    eyes.push(sparkle4(x - 5, 111, 4.2));
+    eyes.push(s('circle', { cx: x + 6, cy: 112, r: 1.8, fill: '#fff', opacity: 0.9 }));
+    eyes.push(s('path', { d: `M${x - 16} 90 Q${x} 78 ${x + 16} 90`, fill: 'none', stroke: '#1a0f45', 'stroke-width': 4.5, 'stroke-linecap': 'round' }));
+    eyes.push(s('path', { d: `M${x + dir * 15} 89 l${dir * 7} -5`, stroke: '#1a0f45', 'stroke-width': 3.2, 'stroke-linecap': 'round' }));
   }
   face.push(s('g', { class: 'av-eyes' }, eyes));
-  face.push(s('ellipse', { cx: 62, cy: 120, rx: 9, ry: 5.5, fill: '#ff8fc4', opacity: 0.75 }));
-  face.push(s('ellipse', { cx: 138, cy: 120, rx: 9, ry: 5.5, fill: '#ff8fc4', opacity: 0.75 }));
-  face.push(s('path', { d: 'M91 126 Q100 136 109 126 Q100 130 91 126 Z', fill: '#e0345f', stroke: '#e0345f', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+  face.push(s('ellipse', { cx: 62, cy: 121, rx: 10, ry: 6, fill: '#ff8fc4', opacity: 0.8 }));
+  face.push(s('ellipse', { cx: 138, cy: 121, rx: 10, ry: 6, fill: '#ff8fc4', opacity: 0.8 }));
+  for (const bx of [57, 133]) face.push(s('path', { d: `M${bx} 124 l4 -6 M${bx + 5} 125 l4 -6 M${bx + 10} 126 l4 -6`, stroke: '#ff5f9e', 'stroke-width': 1.8, 'stroke-linecap': 'round', fill: 'none' }));
+  face.push(s('path', { d: 'M99 112 q1 3 2 0', stroke: '#e07a8f', 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round' }));
+  if (mood === 'happy') {
+    face.push(s('path', { d: 'M88 122 Q100 144 112 122 Z', fill: '#c2204f', stroke: '#c2204f', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    face.push(s('path', { d: 'M94 133 Q100 139 106 133 Q100 129 94 133 Z', fill: '#ff8fa8' }));
+    face.push(sparkle4(42, 92, 7, '#ffc21a'), sparkle4(160, 88, 6, '#27b8ff'));
+  } else {
+    face.push(s('path', { d: 'M92 126 Q96 132 100 127 Q104 132 108 126', fill: 'none', stroke: '#c2204f', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+  }
   if (worn('crystal-crown')) {
     face.push(s('path', { d: 'M68 46 L78 20 L91 40 L100 14 L109 40 L122 20 L132 46 Z', fill: '#bdf0ff', stroke: '#27b8ff', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
     face.push(s('circle', { cx: 100, cy: 36, r: 4, fill: '#ff4fb0' }));
@@ -212,10 +234,10 @@ function avatar() {
 }
 
 // Tap the designer: she poses, sparkles burst, and she says something cheerful.
-const CHEERS = ['Let us design!', 'Math looks good on you!', 'Ooh, so sparkly!', 'Ready for a commission?', 'You are on a roll!', 'Fashion + fractions = fabulous'];
+const CHEERS = ['Ganbatte!', 'Kawaii!', 'Sugoi!', 'Let us design!', 'Ooh, so sparkly!', 'Yatta! You are on a roll!', 'Fashion + fractions = fabulous'];
 const POSES = ['pose-spin', 'pose-jump', 'pose-wave'];
-function avatarStage({ interactive = true } = {}) {
-  const svg = avatar();
+function avatarStage({ interactive = true, mood = 'normal' } = {}) {
+  const svg = avatar(mood);
   const bubble = h('div', { class: 'bubble', hidden: true, 'aria-hidden': 'true' });
   const wrap = h('div', { class: 'card avatar-wrap pop' }, h('span', { class: 'sparkle', 'aria-hidden': 'true', text: '✦' }), h('span', { class: 'sparkle', 'aria-hidden': 'true', text: '✧' }), h('span', { class: 'sparkle', 'aria-hidden': 'true', text: '★' }), h('span', { class: 'sparkle', 'aria-hidden': 'true', text: '✦' }), bubble);
   if (!interactive) {
@@ -225,10 +247,11 @@ function avatarStage({ interactive = true } = {}) {
   const btn = h('button', { class: 'avatar-btn', 'aria-label': 'Tap your designer to make her pose' }, svg);
   let t;
   btn.addEventListener('click', () => {
-    const live = btn.querySelector('svg');
-    for (const p of POSES) live.classList.remove(p);
-    void live.getBoundingClientRect();
+    const live = avatar('happy');
+    btn.replaceChildren(live);
     live.classList.add(POSES[Math.floor(Math.random() * POSES.length)]);
+    clearTimeout(btn._mood);
+    btn._mood = setTimeout(() => btn.replaceChildren(avatar()), 1500);
     burst(wrap, 14);
     bubble.textContent = CHEERS[Math.floor(Math.random() * CHEERS.length)];
     bubble.hidden = false;
@@ -290,6 +313,42 @@ function rain(n = 40) {
   setTimeout(() => layer.remove(), 3400);
 }
 
+
+// ---------- anime extras (all original art) ----------
+const TIPS = ['You can do it!', 'Show the math, then pick!', 'Stuck? Hints are free!', 'Fractions are just slices!', 'Take your time, designer!'];
+function mascot() {
+  const L = [
+    s('ellipse', { cx: 40, cy: 66, rx: 22, ry: 6, fill: '#7a3cff', opacity: 0.15 }),
+    s('path', { d: 'M62 50 Q86 46 80 24 Q72 38 60 40', fill: 'none', stroke: '#fff', 'stroke-width': 7, 'stroke-linecap': 'round', class: 'mo-tail' }),
+    s('ellipse', { cx: 40, cy: 44, rx: 26, ry: 22, fill: '#fff', stroke: '#2a1a5e', 'stroke-width': 3 }),
+    s('path', { d: 'M18 30 L16 6 L34 20 Z', fill: '#fff', stroke: '#2a1a5e', 'stroke-width': 3, 'stroke-linejoin': 'round' }),
+    s('path', { d: 'M62 30 L64 6 L46 20 Z', fill: '#fff', stroke: '#2a1a5e', 'stroke-width': 3, 'stroke-linejoin': 'round' }),
+    s('path', { d: 'M20 24 L19 13 L28 20 Z', fill: '#ff8fc4' }),
+    s('path', { d: 'M60 24 L61 13 L52 20 Z', fill: '#ff8fc4' }),
+    s('g', { class: 'av-eyes' }, s('ellipse', { cx: 29, cy: 42, rx: 6, ry: 8, fill: '#1a0f45' }), s('ellipse', { cx: 51, cy: 42, rx: 6, ry: 8, fill: '#1a0f45' }), s('circle', { cx: 31, cy: 39, r: 2.6, fill: '#fff' }), s('circle', { cx: 53, cy: 39, r: 2.6, fill: '#fff' }), s('circle', { cx: 27.5, cy: 45, r: 1.2, fill: '#fff' }), s('circle', { cx: 49.5, cy: 45, r: 1.2, fill: '#fff' })),
+    s('ellipse', { cx: 20, cy: 52, rx: 5, ry: 3, fill: '#ff8fc4', opacity: 0.8 }),
+    s('ellipse', { cx: 60, cy: 52, rx: 5, ry: 3, fill: '#ff8fc4', opacity: 0.8 }),
+    s('path', { d: 'M36 52 Q40 57 40 52 Q40 57 44 52', fill: 'none', stroke: '#2a1a5e', 'stroke-width': 2, 'stroke-linecap': 'round' }),
+    s('path', { d: 'M34 18 l3 -5 l3 5 l3 -5 l3 5', fill: 'none', stroke: '#ffc21a', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+  ];
+  return s('svg', { class: 'mascot', viewBox: '0 0 92 72', role: 'img', 'aria-label': 'Mochi, your cheering cat' }, L);
+}
+
+const WIN = [['KIRA☆N!', 'キラッ'], ['SUGOI!', 'すごい!'], ['YATTA!', 'やった!'], ['PERFECT!', 'かんぺき!'], ['SUGOKU!', 'すごく!']];
+function impact(correct) {
+  const [word, jp] = correct ? WIN[Math.floor(Math.random() * WIN.length)] : ['GANBATTE!', 'がんばって!'];
+  return h('div', { class: `impact ${correct ? 'win' : 'try'}`, 'aria-hidden': 'true' }, h('span', { class: 'rays' }), h('span', { class: 'sfx', text: word }), h('span', { class: 'jp', text: jp }));
+}
+
+function henshin(names) {
+  const o = h('div', { class: 'henshin', role: 'status', 'aria-label': `New style unlocked: ${names.join(', ')}` }, h('div', { class: 'speed' }), h('div', { class: 'ring' }), h('div', { class: 'hen-title', text: 'NEW STYLE!' }), h('div', { class: 'hen-sub', text: names.join(' + ') }), h('div', { class: 'hen-jp', 'aria-hidden': 'true', text: 'へんしん☆ スタイルゲット!' }));
+  o.addEventListener('click', () => o.remove());
+  document.body.append(o);
+  setTimeout(() => o.remove(), 2600);
+}
+
+const THEME_NAME = { jewelry: ['Jewelry Bench', 'ジュエリー'], fabric: ['Pattern Table', 'パターン'], runway: ['Runway', 'ランウェイ'] };
+
 // ---------- screens ----------
 function loginScreen(msg = '') {
   const code = h('input', { type: 'text', id: 'code', autocomplete: 'off', autocapitalize: 'characters', maxlength: 20, placeholder: 'Example: MATH-7A' });
@@ -320,7 +379,7 @@ function loginScreen(msg = '') {
     go,
   );
   show(
-    h('div', { class: 'center stack' }, h('h1', { text: 'Runway Rally' }), h('p', { class: 'muted', text: 'Design fashion. Earn it with math.' })),
+    h('div', { class: 'center stack' }, h('h1', { text: 'Runway Rally' }), h('p', { class: 'jp-sub', 'aria-hidden': 'true', text: 'ランウェイ・ラリー ☆ ファッション × さんすう' }), h('p', { class: 'muted', text: 'Design fashion. Earn it with math.' }), h('div', { class: 'login-mascot' }, mascot())),
     h('div', { class: 'card' }, form),
   );
 }
@@ -355,7 +414,8 @@ async function homeScreen() {
     api('/api/event', { method: 'POST', body: { area } }).catch(() => {});
     fn();
   };
-  const tile = (emoji, label, onclick, extra = '') => h('button', { class: `tile ${extra}`, onclick }, h('span', { class: 'emoji', 'aria-hidden': 'true', text: emoji }), h('span', { text: label }));
+  const JP = { 'Jewelry Bench': 'ジュエリー', 'Pattern Table': 'パターン', Runway: 'ランウェイ', 'Surprise me': 'サプライズ', Wardrobe: 'ワードローブ', Cards: 'カード' };
+  const tile = (emoji, label, onclick, extra = '') => h('button', { class: `tile ${extra}`, onclick }, h('span', { class: 'emoji', 'aria-hidden': 'true', text: emoji }), h('span', { text: label }), h('span', { class: 'jp', 'aria-hidden': 'true', text: JP[label] || '' }));
 
   show(
     h('div', { class: 'topbar' }, h('div', { class: 'pill', text: st.nickname }), h('div', { class: 'pill thread', text: `🧵 ${st.thread} Thread` })),
@@ -573,8 +633,9 @@ function taskScreen() {
 
   const nodes = [
     h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Pause', onclick: () => homeScreen() }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })),
+    h('div', { class: 'chapter' }, h('span', { class: 'ch-num', text: `CHAPTER ${t.number}` }), h('span', { class: 'ch-name', text: (THEME_NAME[t.theme] || THEME_NAME.jewelry)[0] }), h('span', { class: 'ch-jp', 'aria-hidden': 'true', text: (THEME_NAME[t.theme] || THEME_NAME.jewelry)[1] })),
     dots,
-    state.story ? h('p', { class: 'story center', text: state.story }) : null,
+    h('div', { class: 'mascot-row' }, mascot(), h('div', { class: 'mascot-bubble', text: state.story || TIPS[(t.number - 1) % TIPS.length] })),
     h('div', { class: 'card stack pop' }, h('p', { class: 'prompt', text: t.prompt }), t.math ? h('div', { class: 'mathline', 'aria-label': `The math: ${t.math}`, text: t.math }) : null, speak),
     choiceBtns.length ? h('div', { class: 'choices', role: 'group', 'aria-label': 'Pick an answer' }, choiceBtns) : null,
     display,
@@ -602,11 +663,12 @@ function resultScreen(r) {
   state.streak = r.correct ? (state.streak || 0) + 1 : 0;
   const cls = r.correct ? 'good' : 'reveal';
   const kids = [
+    impact(r.correct),
     h('div', { class: `feedback ${cls} pop` }, h('p', { text: r.feedback }), r.correct ? null : h('p', { class: 'muted', text: `${r.explanation} (Answer: ${r.revealedAnswer})` }), h('p', { class: 'reward', text: `+${r.thread} Thread` })),
   ];
   for (const u of r.unlocked) kids.push(h('div', { class: 'unlock pop', text: `New item unlocked: ${u.name}` }));
   const nodes = [h('div', { class: 'topbar' }, h('div', { class: 'pill', text: state.student.nickname }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })), ...kids];
-  if (r.unlocked.length) nodes.push(avatarStage({ interactive: false }));
+  if (r.unlocked.length) nodes.push(avatarStage({ interactive: false, mood: 'happy' }));
   const next = h('button', {
     class: 'primary',
     text: r.commissionComplete ? 'Open your pack' : 'Next',
@@ -626,7 +688,10 @@ function resultScreen(r) {
   show(...nodes);
   next.focus();
   if (r.correct) burst(document.querySelector('.feedback'), r.unlocked.length ? 36 : 18);
-  if (r.unlocked.length) setTimeout(() => rain(46), 150);
+  if (r.unlocked.length) {
+    henshin(r.unlocked.map((u) => u.name));
+    setTimeout(() => rain(46), 1800);
+  }
   if (state.streak >= 2) comboToast(state.streak);
 }
 
