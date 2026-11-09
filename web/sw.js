@@ -1,7 +1,7 @@
 // Caches the app shell so the game opens quickly on slow school Wi-Fi.
 // Gameplay still needs the network for grading. An offline play queue is on the roadmap.
-const CACHE = 'runway-rally-v5';
-const SHELL = ['/', '/styles.css', '/app.js', '/manifest.webmanifest', '/icons/icon.svg'];
+const CACHE = 'runway-rally-v6';
+const SHELL = ['/', '/styles.css', '/app.js', '/look.js', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));

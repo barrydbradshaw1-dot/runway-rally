@@ -113,16 +113,25 @@ function signOut() {
 const has = (id) => state.student.unlocks.some((i) => i.id === id);
 
 // ---------- avatar (original anime-style art: layered SVG that shows earned items) ----------
-const HAIR = [
-  { name: 'Violet', main: '#8a4dff', shade: '#5a2ed6', shine: '#c9a8ff' },
-  { name: 'Pink', main: '#ff5fb8', shade: '#d6338f', shine: '#ffb3e0' },
-  { name: 'Sky', main: '#34b7ff', shade: '#1a85d6', shine: '#a8e2ff' },
-  { name: 'Mint', main: '#1fd9a5', shade: '#0fa67b', shine: '#a6f5dc' },
-  { name: 'Sunny', main: '#ffc21a', shade: '#e09400', shine: '#fff0a6' },
-  { name: 'Coral', main: '#ff7a59', shade: '#d9502d', shine: '#ffc2b0' },
-];
-const EYES = ['#ff4fb0', '#27b8ff', '#16d9a0', '#7a3cff', '#ff8a3d', '#ffc21a'];
-const style = { hair: Number(store.get('rr_hair')) || 0, eyes: Number(store.get('rr_eyes')) || 1, off: new Set(JSON.parse(store.get('rr_off') || '[]')) };
+import { mix, SKIN, HAIR_COLORS, EYE_COLORS, HAIR_STYLES, WORLD, DEFAULT_LOOK, cleanLook, suggestFromPhoto, NATURAL_HAIR } from '/look.js';
+// The look is kept per student on this device only (shared school computers keep separate looks).
+const style = { off: new Set() };
+const lookKey = () => `rr_look:${state.student?.classCode || ''}:${state.student?.nickname || ''}`;
+let look = { ...DEFAULT_LOOK };
+function loadLook() {
+  try {
+    look = cleanLook(JSON.parse(store.get(lookKey()) || 'null'));
+  } catch {
+    look = { ...DEFAULT_LOOK };
+  }
+  try {
+    style.off = new Set(JSON.parse(store.get(`rr_off:${state.student?.nickname || ''}`) || '[]'));
+  } catch {
+    style.off = new Set();
+  }
+}
+let lookFor = null;
+const saveLook = () => store.set(lookKey(), JSON.stringify(look));
 const worn = (id) => has(id) && !style.off.has(id);
 
 function setsComplete() {
@@ -130,9 +139,88 @@ function setsComplete() {
   return sets.filter((x) => x.items.every((id) => worn(id)));
 }
 
+const mixHex = (c) => mix(c, '#7a3cff', 0.35);
+
+// Hair shapes drawn behind the head. Every style is original art; the colour comes from the student's pick.
+function hairBack(styleIx, hr) {
+  const out = [];
+  const X = (m) => (x) => (m === 1 ? x : 200 - x);
+  const cap = (d) => out.push(s('path', { d, fill: hr.shade }));
+  const tie = (x, y, c = '#ff4fb0') => out.push(s('circle', { cx: x, cy: y, r: 5, fill: c, stroke: '#1a0f45', 'stroke-width': 1.5 }));
+  switch (HAIR_STYLES[styleIx]) {
+    case 'Twin tails':
+      for (const m of [1, -1]) {
+        const x = X(m);
+        out.push(s('path', { d: `M${x(46)} 70 Q${x(8)} 116 ${x(22)} 190 Q${x(34)} 214 ${x(50)} 192 Q${x(42)} 140 ${x(58)} 98 Z`, fill: hr.main }));
+        out.push(s('path', { d: `M${x(40)} 100 Q${x(20)} 140 ${x(28)} 184`, fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.7 }));
+      }
+      out.push(s('path', { d: 'M100 34 Q94 10 110 8 Q124 8 114 24', fill: 'none', stroke: hr.main, 'stroke-width': 6, 'stroke-linecap': 'round' }));
+      cap('M44 90 Q36 190 60 232 Q76 216 74 150 L126 150 Q124 216 140 232 Q164 190 156 90 Q150 30 100 28 Q50 30 44 90 Z');
+      break;
+    case 'Long':
+      cap('M42 90 Q30 190 52 246 Q80 226 76 150 L124 150 Q120 226 148 246 Q170 190 158 90 Q150 28 100 26 Q50 28 42 90 Z');
+      out.push(s('path', { d: 'M52 110 Q44 170 58 226', fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.6 }));
+      break;
+    case 'Bob':
+      cap('M42 92 Q36 150 56 168 L144 168 Q164 150 158 92 Q150 28 100 26 Q50 28 42 92 Z');
+      out.push(s('path', { d: 'M50 120 Q50 148 62 160', fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.6 }));
+      break;
+    case 'Ponytail':
+      cap('M44 92 Q40 140 56 154 L144 154 Q160 140 156 92 Q150 28 100 26 Q50 28 44 92 Z');
+      out.push(s('path', { d: 'M138 40 Q198 34 192 112 Q188 176 160 204 Q172 132 148 92 Z', fill: hr.main }));
+      out.push(s('path', { d: 'M164 70 Q184 90 178 150', fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.7 }));
+      tie(142, 46);
+      break;
+    case 'Buns':
+      cap('M44 92 Q42 36 100 28 Q158 36 156 92 Q150 60 100 58 Q50 60 44 92 Z');
+      for (const x of [54, 146]) {
+        out.push(s('circle', { cx: x, cy: 34, r: 20, fill: hr.main }));
+        out.push(s('path', { d: `M${x - 10} 28 Q${x} 18 ${x + 10} 26`, fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.8 }));
+        tie(x < 100 ? x + 12 : x - 12, 48, '#ffc21a');
+      }
+      break;
+    case 'Braids':
+      cap('M42 92 Q36 140 52 152 L148 152 Q164 140 158 92 Q150 28 100 26 Q50 28 42 92 Z');
+      for (const m of [1, -1]) {
+        const x = X(m);
+        for (let i = 0; i < 7; i++) out.push(s('ellipse', { cx: x(52 + (i % 2 ? 4 : -4)), cy: 130 + i * 15, rx: 9, ry: 11, fill: i % 2 ? hr.main : hr.shade }));
+        tie(x(52), 236, '#ff4fb0');
+      }
+      break;
+    case 'Puffs':
+      cap('M44 92 Q42 36 100 28 Q158 36 156 92 Q150 60 100 58 Q50 60 44 92 Z');
+      for (const x of [44, 156]) {
+        out.push(s('circle', { cx: x, cy: 52, r: 30, fill: hr.shade }));
+        out.push(s('circle', { cx: x, cy: 50, r: 25, fill: hr.main }));
+        out.push(s('path', { d: `M${x - 12} 40 Q${x} 30 ${x + 12} 38`, fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.7 }));
+        tie(x < 100 ? x + 24 : x - 24, 70, '#ffc21a');
+      }
+      break;
+    case 'Curls':
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        out.push(s('circle', { cx: 100 + 62 * Math.cos(a), cy: 86 + 60 * Math.sin(a), r: 19, fill: hr.shade }));
+      }
+      for (let i = 0; i < 16; i++) {
+        const a = ((i + 0.5) / 16) * Math.PI * 2;
+        out.push(s('circle', { cx: 100 + 56 * Math.cos(a), cy: 84 + 54 * Math.sin(a), r: 17, fill: hr.main }));
+      }
+      out.push(s('path', { d: 'M52 40 Q70 22 96 22', fill: 'none', stroke: hr.shine, 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.7 }));
+      break;
+    default:
+  }
+  return out;
+}
+
 function avatar(mood = 'normal') {
-  const hr = HAIR[style.hair % HAIR.length];
-  const eye = EYES[style.eyes % EYES.length];
+  const hr = HAIR_COLORS[look.hair];
+  const eye = EYE_COLORS[look.eyes];
+  const sk = SKIN[look.skin];
+  if (lookFor !== lookKey()) {
+    loadLook();
+    lookFor = lookKey();
+  }
+  const covered = look.head !== null;
   const defs = s(
     'defs',
     {},
@@ -155,20 +243,12 @@ function avatar(mood = 'normal') {
     }
   }
 
-  // long back hair + twin ribbons
-  // twin tails + ahoge (anime hair antenna)
-  for (const m of [1, -1]) {
-    const X = (x) => (m === 1 ? x : 200 - x);
-    back.push(s('path', { d: `M${X(46)} 70 Q${X(8)} 116 ${X(22)} 190 Q${X(34)} 214 ${X(50)} 192 Q${X(42)} 140 ${X(58)} 98 Z`, fill: hr.main }));
-    back.push(s('path', { d: `M${X(40)} 100 Q${X(20)} 140 ${X(28)} 184`, fill: 'none', stroke: hr.shine, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.7 }));
-  }
-  back.push(s('path', { d: 'M100 34 Q94 10 110 8 Q124 8 114 24', fill: 'none', stroke: hr.main, 'stroke-width': 6, 'stroke-linecap': 'round' }));
-  back.push(s('path', { d: 'M44 90 Q36 190 60 232 Q76 216 74 150 L126 150 Q124 216 140 232 Q164 190 156 90 Q150 30 100 28 Q50 30 44 90 Z', fill: hr.shade }));
+  if (look.head !== 'hijab') back.push(...hairBack(look.hairStyle, hr));
   if (worn('couture-cape')) back.push(s('path', { d: 'M50 132 Q100 118 150 132 L176 262 Q100 280 24 262 Z', fill: 'url(#gCape)' }));
 
   // legs, socks, shoes
-  body.push(s('rect', { x: 82, y: 214, width: 14, height: 46, rx: 6, fill: '#ffe0cc' }));
-  body.push(s('rect', { x: 104, y: 214, width: 14, height: 46, rx: 6, fill: '#ffe0cc' }));
+  body.push(s('rect', { x: 82, y: 214, width: 14, height: 46, rx: 6, fill: sk.base }));
+  body.push(s('rect', { x: 104, y: 214, width: 14, height: 46, rx: 6, fill: sk.base }));
   body.push(s('rect', { x: 82, y: 238, width: 14, height: 18, rx: 4, fill: '#fff' }));
   body.push(s('rect', { x: 104, y: 238, width: 14, height: 18, rx: 4, fill: '#fff' }));
   body.push(s('path', { d: 'M74 258 Q89 250 98 258 L98 268 L72 268 Z', fill: '#ff4fb0' }));
@@ -180,14 +260,14 @@ function avatar(mood = 'normal') {
       body.push(s('path', { d: `M${x + 5} 244 h18 M${x + 5} 252 h18`, stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' }));
     }
   }
-  body.push(s('rect', { x: 88, y: 128, width: 24, height: 22, rx: 8, fill: '#ffe0cc' }));
+  body.push(s('rect', { x: 88, y: 128, width: 24, height: 22, rx: 8, fill: sk.base }));
 
   if (worn('gala-gown')) {
     body.push(s('path', { d: 'M72 146 L128 146 L162 250 Q100 272 38 250 Z', fill: 'url(#gGown)' }));
     body.push(s('path', { d: 'M72 146 L128 146 L132 172 L68 172 Z', fill: '#ffb3e0' }));
     for (const [x, y, c] of [[70, 214, '#fff'], [100, 232, '#ffe36e'], [132, 212, '#fff'], [86, 196, '#9ae7ff'], [118, 190, '#fff']]) body.push(s('path', { d: `M${x} ${y - 5} L${x + 2} ${y - 1} L${x + 6} ${y} L${x + 2} ${y + 1} L${x} ${y + 5} L${x - 2} ${y + 1} L${x - 6} ${y} L${x - 2} ${y - 1} Z`, fill: c }));
   } else {
-    body.push(s('rect', { x: 72, y: 146, width: 56, height: 70, rx: 16, fill: worn('basic-tee') ? '#fff' : '#ffe0cc' }));
+    body.push(s('rect', { x: 72, y: 146, width: 56, height: 70, rx: 16, fill: worn('basic-tee') ? '#fff' : sk.base }));
     if (worn('basic-tee')) {
       body.push(s('path', { d: 'M100 164 l5 10 11 1 -8 8 2 11 -10 -6 -10 6 2 -11 -8 -8 11 -1 z', fill: '#ff4fb0' }));
     }
@@ -199,6 +279,29 @@ function avatar(mood = 'normal') {
     body.push(s('path', { d: 'M110 146 L136 146 Q144 180 138 218 L112 218 Z', fill: 'url(#gJacket)' }));
     body.push(s('path', { d: 'M62 162 H90 M110 162 H138', stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-dasharray': '2 6' }));
   }
+  if (look.extras.includes('embroidery') && !worn('gala-gown')) {
+    const c = WORLD[4].color;
+    body.push(s('rect', { x: 72, y: 146, width: 56, height: 62, rx: 16, fill: c, stroke: '#1a0f45', 'stroke-width': 2 }));
+    body.push(s('path', { d: 'M82 150 Q100 170 118 150', fill: 'none', stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' }));
+    for (let i = 0; i < 5; i++) {
+      body.push(s('path', { d: `M${80 + i * 10} 186 l4 -6 l4 6 l-4 6 z`, fill: i % 2 ? '#ff4fb0' : '#16d9a0' }));
+      body.push(s('circle', { cx: 84 + i * 10, cy: 200, r: 2.2, fill: '#fff' }));
+    }
+  }
+  if (look.extras.includes('obi')) {
+    const c = WORLD[2].color;
+    body.push(s('path', { d: 'M62 146 L96 146 L116 214 L66 214 Q58 180 62 146 Z', fill: c, stroke: '#1a0f45', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    body.push(s('path', { d: 'M138 146 L104 146 L84 214 L134 214 Q142 180 138 146 Z', fill: mixHex(c), stroke: '#1a0f45', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    body.push(s('rect', { x: 66, y: 184, width: 68, height: 16, rx: 3, fill: '#ffc21a', stroke: '#1a0f45', 'stroke-width': 2 }));
+    body.push(s('path', { d: 'M96 190 h8', stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' }));
+    for (const m of [1, -1]) body.push(s('path', { d: `M${m === 1 ? 62 : 138} 150 q${m * -14} 26 ${m * -6} 58`, fill: 'none', stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-dasharray': '1 7' }));
+  }
+  if (look.extras.includes('dupatta')) {
+    const c = WORLD[3].color;
+    body.push(s('path', { d: 'M70 142 Q96 168 132 160 L142 232 Q120 244 112 214 Q104 188 78 168 Z', fill: c, stroke: '#1a0f45', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    body.push(s('path', { d: 'M132 160 L142 232', stroke: '#ffc21a', 'stroke-width': 4, 'stroke-linecap': 'round', 'stroke-dasharray': '2 5' }));
+    body.push(s('path', { d: 'M80 150 Q100 168 124 163', fill: 'none', stroke: '#fff', 'stroke-width': 2.5, 'stroke-linecap': 'round', opacity: 0.8 }));
+  }
   if (worn('sale-scarf')) {
     body.push(s('path', { d: 'M80 142 Q100 160 120 142 L124 156 Q100 176 76 156 Z', fill: '#ffc21a' }));
     body.push(s('path', { d: 'M116 154 L130 190 L118 186 L112 160 Z', fill: '#ff8a3d' }));
@@ -206,17 +309,19 @@ function avatar(mood = 'normal') {
   if (worn('ratio-pearls')) for (let i = 0; i < 7; i++) body.push(s('circle', { cx: 80 + i * 6.7, cy: 154 + Math.sin((i / 6) * Math.PI) * 10, r: 3.6, fill: '#fff', stroke: '#ffb3e0', 'stroke-width': 1.2 }));
 
   // head
-  face.push(s('circle', { cx: 100, cy: 92, r: 52, fill: '#ffe9dc' }));
-  // bangs with shine
-  face.push(s('path', { d: 'M46 92 Q48 30 100 30 Q152 30 154 92 Q138 58 120 70 Q108 52 94 70 Q76 52 46 92 Z', fill: hr.main }));
-  face.push(s('path', { d: 'M62 54 Q80 40 100 40', fill: 'none', stroke: hr.shine, 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.8 }));
-  // hair ribbons
-  for (const x of [44, 156]) {
-    face.push(s('path', { d: `M${x} 70 l${x < 100 ? -18 : 18} -10 v22 z`, fill: '#ff4fb0' }));
-    face.push(s('path', { d: `M${x} 70 l${x < 100 ? -2 : 2} 18 l${x < 100 ? -16 : 16} 0 z`, fill: '#ff8a3d' }));
-    face.push(s('circle', { cx: x, cy: 70, r: 5, fill: '#ffc21a' }));
+  face.push(s('circle', { cx: 100, cy: 92, r: 52, fill: sk.base }));
+  if (!covered) {
+    // bangs with shine
+    face.push(s('path', { d: 'M46 92 Q48 30 100 30 Q152 30 154 92 Q138 58 120 70 Q108 52 94 70 Q76 52 46 92 Z', fill: hr.main }));
+    face.push(s('path', { d: 'M62 54 Q80 40 100 40', fill: 'none', stroke: hr.shine, 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.8 }));
+    // hair ribbons
+    for (const x of [44, 156]) {
+      face.push(s('path', { d: `M${x} 70 l${x < 100 ? -18 : 18} -10 v22 z`, fill: '#ff4fb0' }));
+      face.push(s('path', { d: `M${x} 70 l${x < 100 ? -2 : 2} 18 l${x < 100 ? -16 : 16} 0 z`, fill: '#ff8a3d' }));
+      face.push(s('circle', { cx: x, cy: 70, r: 5, fill: '#ffc21a' }));
+    }
   }
-  if (worn('rate-beret')) {
+  if (worn('rate-beret') && !covered) {
     face.push(s('path', { d: 'M52 56 Q56 22 104 24 Q150 26 150 54 Q130 44 100 46 Q72 46 52 56 Z', fill: '#ff4fb0', stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
     face.push(s('circle', { cx: 112, cy: 20, r: 5, fill: '#ff4fb0', stroke: '#1a0f45', 'stroke-width': 2.5 }));
     face.push(s('path', { d: 'M76 40 l3 6 l7 1 l-5 5 l1 7 l-6 -3 l-6 3 l1 -7 l-5 -5 l7 -1 z', fill: '#ffe36e' }));
@@ -249,8 +354,8 @@ function avatar(mood = 'normal') {
     }
     face.push(s('path', { d: 'M92 98 Q100 94 108 98', fill: 'none', stroke: '#1a0f45', 'stroke-width': 3, 'stroke-linecap': 'round' }));
   }
-  face.push(s('ellipse', { cx: 62, cy: 121, rx: 10, ry: 6, fill: '#ff8fc4', opacity: 0.8 }));
-  face.push(s('ellipse', { cx: 138, cy: 121, rx: 10, ry: 6, fill: '#ff8fc4', opacity: 0.8 }));
+  face.push(s('ellipse', { cx: 62, cy: 121, rx: 10, ry: 6, fill: sk.blush, opacity: 0.8 }));
+  face.push(s('ellipse', { cx: 138, cy: 121, rx: 10, ry: 6, fill: sk.blush, opacity: 0.8 }));
   for (const bx of [57, 133]) face.push(s('path', { d: `M${bx} 124 l4 -6 M${bx + 5} 125 l4 -6 M${bx + 10} 126 l4 -6`, stroke: '#ff5f9e', 'stroke-width': 1.8, 'stroke-linecap': 'round', fill: 'none' }));
   face.push(s('path', { d: 'M99 112 q1 3 2 0', stroke: '#e07a8f', 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round' }));
   if (mood === 'happy') {
@@ -260,9 +365,24 @@ function avatar(mood = 'normal') {
   } else {
     face.push(s('path', { d: 'M92 126 Q96 132 100 127 Q104 132 108 126', fill: 'none', stroke: '#c2204f', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
   }
-  if (worn('crystal-crown')) {
+  if (worn('crystal-crown') && !covered) {
     face.push(s('path', { d: 'M68 46 L78 20 L91 40 L100 14 L109 40 L122 20 L132 46 Z', fill: '#bdf0ff', stroke: '#27b8ff', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
     face.push(s('circle', { cx: 100, cy: 36, r: 4, fill: '#ff4fb0' }));
+  }
+
+  if (look.head === 'hijab') {
+    const c = WORLD[0].color;
+    face.push(s('path', { d: 'M34 100 Q28 12 100 12 Q172 12 166 100 Q174 162 154 204 Q100 220 46 204 Q26 162 34 100 Z M56 100 A44 48 0 1 0 144 100 A44 48 0 1 0 56 100 Z', fill: c, 'fill-rule': 'evenodd', stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+    face.push(s('path', { d: 'M48 40 Q60 22 100 20', fill: 'none', stroke: '#fff', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.55 }));
+    face.push(s('path', { d: 'M44 150 Q60 176 56 198 M156 150 Q140 176 144 198', fill: 'none', stroke: '#1a0f45', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.35 }));
+    for (const [x, y] of [[40, 120], [160, 120], [60, 190], [140, 190]]) face.push(s('circle', { cx: x, cy: y, r: 3, fill: '#fff', opacity: 0.8 }));
+  } else if (look.head === 'headwrap') {
+    const c = WORLD[1].color;
+    face.push(s('path', { d: 'M46 84 Q44 18 100 16 Q156 18 154 84 Q130 58 100 60 Q70 58 46 84 Z', fill: c, stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+    face.push(s('path', { d: 'M52 62 Q100 38 148 62', fill: 'none', stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-dasharray': '2 7' }));
+    face.push(s('path', { d: 'M56 76 Q100 50 144 76', fill: 'none', stroke: '#1a0f45', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.35 }));
+    face.push(s('path', { d: 'M138 24 Q168 2 176 26 Q158 24 146 36 Z M146 30 Q176 36 172 62 Q160 44 142 40 Z', fill: c, stroke: '#1a0f45', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+    face.push(s('circle', { cx: 142, cy: 30, r: 7, fill: c, stroke: '#1a0f45', 'stroke-width': 2.5 }));
   }
 
   if (setsComplete().length) back.unshift(s('ellipse', { cx: 100, cy: 150, rx: 92, ry: 128, fill: 'none', stroke: '#ffc21a', 'stroke-width': 4, 'stroke-dasharray': '3 9', 'stroke-linecap': 'round', opacity: 0.9 }), s('ellipse', { cx: 100, cy: 150, rx: 84, ry: 120, fill: '#ffe36e', opacity: 0.18 }));
@@ -295,20 +415,82 @@ function avatarStage({ interactive = true, mood = 'normal' } = {}) {
     clearTimeout(t);
     t = setTimeout(() => (bubble.hidden = true), 1800);
   });
-  const restyle = (key, list, label) =>
-    h('button', {
-      class: 'chip-btn',
-      text: label,
-      onclick: () => {
-        style[key] = (style[key] + 1) % list.length;
-        store.set(`rr_${key}`, String(style[key]));
-        const fresh = avatar();
-        btn.replaceChildren(fresh);
-        burst(wrap, 8);
-      },
-    });
-  wrap.append(btn, h('div', { class: 'row chips' }, restyle('hair', HAIR, '💇 Hair'), restyle('eyes', EYES, '👁️ Eyes')));
+  wrap.append(btn, h('div', { class: 'row chips' }, h('button', { class: 'chip-btn', text: '🎨 My look', onclick: lookScreen })));
   return wrap;
+}
+
+// ---------- My look: skin, hair, eyes and world style. Stored on this device only. ----------
+function lookScreen() {
+  const stage = h('div');
+  const body = h('div', { class: 'stack look-body' });
+  const note = h('p', { class: 'muted center', role: 'status', text: '' });
+  const repaint = () => stage.replaceChildren(avatarStage({ interactive: false }));
+  const change = (patch) => {
+    Object.assign(look, patch);
+    look = cleanLook(look);
+    saveLook();
+    paint();
+  };
+  const swatch = (color, label, on, onclick) => {
+    const b = h('button', { class: `swatch ${on ? 'on' : ''}`, 'aria-label': label, 'aria-pressed': on ? 'true' : 'false', title: label, onclick });
+    b.style.background = color;
+    return b;
+  };
+  const chip = (label, on, onclick) => h('button', { class: `chip-btn ${on ? 'on' : ''}`, 'aria-pressed': on ? 'true' : 'false', text: label, onclick });
+  const section = (title, hint, ...kids) => h('div', { class: 'card stack' }, h('h3', { text: title }), hint && h('p', { class: 'muted', text: hint }), ...kids);
+
+  const photo = h('input', { type: 'file', accept: 'image/*', capture: 'user', class: 'file-in', 'aria-label': 'Take or choose a selfie' });
+  photo.addEventListener('change', async () => {
+    const f = photo.files?.[0];
+    photo.value = '';
+    if (!f) return;
+    note.textContent = 'Matching colors on this device…';
+    try {
+      const r = await suggestFromPhoto(f);
+      const patch = {};
+      if (r.skin !== null) patch.skin = r.skin;
+      if (r.hair !== null) patch.hair = r.hair;
+      change(patch);
+      note.textContent = 'Closest match found. Photos and lighting can fool a computer, so tweak anything below until she looks like you.';
+    } catch {
+      note.textContent = 'That photo would not open. Pick the colors below instead.';
+    }
+  });
+
+  function paint() {
+    repaint();
+    const isLoose = look.hair >= NATURAL_HAIR;
+    body.replaceChildren(
+      section(
+        'Start from a selfie (optional)',
+        'Your photo stays on this device. It is never uploaded or saved, and it is not shown anywhere. The game only reads skin and hair colors to suggest a match.',
+        h('label', { class: 'photo-btn' }, h('span', { text: '📸 Take or choose a selfie' }), photo),
+      ),
+      section('Skin tone', 'Pick the one that feels most like you.', h('div', { class: 'swatches' }, SKIN.map((k, i) => swatch(k.base, `Skin tone ${i + 1} of ${SKIN.length}`, look.skin === i, () => change({ skin: i }))))),
+      section('Hair style', null, h('div', { class: 'row chips wrap' }, HAIR_STYLES.map((n, i) => chip(n, look.hairStyle === i, () => change({ hairStyle: i }))))),
+      section(
+        'Hair color',
+        isLoose ? 'Anime colors are on. Fun!' : 'Natural shades first, then anime colors.',
+        h('div', { class: 'swatches' }, HAIR_COLORS.map((c, i) => swatch(c.main, `${c.name} hair`, look.hair === i, () => change({ hair: i })))),
+      ),
+      section('Eye color', null, h('div', { class: 'swatches' }, EYE_COLORS.map((c, i) => swatch(c, `Eye color ${i + 1}`, look.eyes === i, () => change({ eyes: i }))))),
+      section(
+        'World style',
+        'Optional pieces inspired by clothing traditions around the world. They are for anyone to wear.',
+        h('div', { class: 'row chips wrap' },
+          chip('No head piece', look.head === null, () => change({ head: null })),
+          chip('Hijab', look.head === 'hijab', () => change({ head: 'hijab' })),
+          chip('Head wrap', look.head === 'headwrap', () => change({ head: 'headwrap' })),
+        ),
+        h('div', { class: 'row chips wrap' }, WORLD.filter((w) => !['hijab', 'headwrap'].includes(w.id)).map((w) => {
+          const on = look.extras.includes(w.id);
+          return chip(w.name, on, () => change({ extras: on ? look.extras.filter((x) => x !== w.id) : [...look.extras, w.id] }));
+        })),
+      ),
+    );
+  }
+  show(h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'My look' }), h('span')), stage, note, body, h('button', { class: 'primary', text: 'Done', onclick: homeScreen }));
+  paint();
 }
 
 function comboToast(n) {
@@ -976,7 +1158,7 @@ function wardrobeScreen() {
                 onclick: () => {
                   if (on) style.off.add(i.id);
                   else style.off.delete(i.id);
-                  store.set('rr_off', JSON.stringify([...style.off]));
+                  store.set(`rr_off:${state.student?.nickname || ''}`, JSON.stringify([...style.off]));
                   paint(!on);
                 },
               })
