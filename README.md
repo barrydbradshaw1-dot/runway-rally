@@ -6,11 +6,12 @@ This is the pilot starter for the design in the Runway Rally Game Design Documen
 **What works now**
 - Browser client (installable PWA): sign in with class code + nickname, pick a themed commission, number pad, layered hints, retries, Thread rewards, item unlocks that appear on the avatar, card packs with a pity rule.
 - Server-side grading and rewards. Answers never reach the client.
-- Adaptive engine v1: per-skill mastery, difficulty levels, prerequisite repair after repeated misses, interest model that follows which areas she picks (with 20% exploration).
+- Adaptive engine v2 (see "How it teaches" below): 19 skills from times tables to two-step equations, a short skills check that places each student, worked examples, steadier difficulty, mistake-specific feedback, spaced review, and prerequisite repair after repeated misses. The interest model still follows which areas she picks (with 20% exploration).
+- Sign-in code (`RR-XXXX-XXXX`) so progress follows the student to a new device, and a private read-only family progress page at `/progress/`.
 - **Teacher console** at `/admin/`: sign in with the class code and `ADMIN_TOKEN`, then see a mastery heat map by skill, accuracy, favorite game areas, suggested small groups, who has not started, sorting, auto-refresh, and CSV export. A skill is flagged only after 2+ answers with mastery under 40%, or 3 misses in a row. Skills not yet tried are never flagged.
 - Postgres storage (or an in-memory store for development), Docker Compose with automatic HTTPS, backup and restore scripts.
 
-**Not built yet (see the GDD roadmap)**: per-teacher accounts (the console uses one shared admin token for now), LTI 1.3 / OneRoster / SSO, offline play queue, moderation list for nicknames, real art and audio (the avatar is placeholder SVG), content authoring tools, native store builds.
+**Not built yet (see the GDD roadmap)**: per-teacher accounts (the console uses one shared admin token for now), OneRoster / SSO, offline play queue, data deletion and retention controls, moderation list for nicknames, real art and audio (the avatar is placeholder SVG), content authoring tools, native store builds.
 
 ## Run it locally (no database needed)
 
@@ -122,6 +123,36 @@ Not supported yet: Deep Linking (add the tool as a link rather than choosing con
 
 Tested against a simulated Brightspace (`api/test/lti.test.js`: fake keyset, token, roster and grade endpoints). **Run one real launch in a sandbox course before a pilot**, since D2L's exact endpoint values and role names are only visible in your own tenant.
 
+## How it teaches
+
+The learning design follows well-established findings: start where the student is, show a worked example before practice, keep success around 70 to 85 percent, give feedback on the actual mistake, space review out over days, and keep sessions short.
+
+- **Skill map.** 19 skills in a prerequisite graph: times tables, division facts, equivalent fractions, simplifying, decimals, fraction of a number, adding like and unlike fractions, multiplying fractions, ratios, unit rates, converting fractions, decimals and percents, percent of a number, percent change, adding and multiplying integers, evaluating expressions, one-step and two-step equations. A skill opens when every prerequisite reaches 40 percent. Answers can be whole numbers, negatives, decimals or fractions; fraction-only problems explain kindly when a fraction is not in lowest terms.
+- **Georgia standards.** Grade 7 skills carry Georgia K-12 Mathematics Standards codes (7.NR.1 rational number operations; 7.PAR.2, 7.PAR.3, 7.PAR.4 for expressions, equations and proportional reasoning). Earlier skills are the grade 3 to 6 foundations those standards build on. Check codes against the current GaDOE documents before showing them to a school.
+- **Skills check.** Up to 18 questions, foundations first, no hints and no score, with a "Not sure yet" button. A right answer marks that skill and everything under it as known; a miss (confirmed by a second question on skills many others depend on) marks it and everything built on it as a gap, so a struggling student answers only a few questions. Known skills start at 65 percent, gaps at 20 percent.
+- **Worked example.** The first time a student meets a skill at a new level, she sees one solved step by step before trying one.
+- **Difficulty.** Two misses in a row step down a level, two clean wins step up, and mostly-wrong recent work drops to confidence builders. Easy problems can show at most 60 percent mastery and medium 85 percent, so a skill only reads as mastered after hard problems.
+- **Feedback.** Each generator lists likely wrong answers with a short explanation (for example, adding denominators). Sign slips and decimal-place slips are caught for every skill. After two misses she sees every step.
+- **Spaced review.** A missed skill comes back the next day; clean reviews space out to 3, 7 and 21 days. The 3rd and 5th problems of a commission can be review from another skill. A skill left alone for two weeks fades by 10 points (never below 45 percent) and is queued for review.
+- **Rewards tied to learning.** A card pack needs 3 of 5 right or a real mastery gain; otherwise the student still earns Thread for effort and a tip on how to earn the pack.
+- **Session length.** After 3 commissions or about 20 active minutes in a day she gets one wrap-up screen with the day's totals and streak. She can keep playing.
+- **Family page.** "For grown-ups" on the home screen makes a private link (`/progress/#k=...`). It shows minutes and days this week, accuracy, what improved, what she is working on and what could use a hand. The key stays in the link fragment and is sent only in a header; making a new link turns the old one off.
+
+### New endpoints
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /api/session` | now also returns `recoveryCode` |
+| `POST /api/session/recover` `{code}` | sign in with a recovery code (10 tries a minute per IP) |
+| `POST /api/recovery-code` | issue a new code; the old one stops working (not for Brightspace students) |
+| `POST /api/placement/start` `{restart?}` | start or resume the skills check |
+| `POST /api/placement/answer` `{taskId, answer, skip?}` | answer or skip; returns the next question or a summary |
+| `POST /api/placement/skip` | do the check later |
+| `POST /api/progress-link` | make a family link; the old one stops working |
+| `GET /api/progress` with header `x-progress-key` | read-only family summary (60 a minute per IP) |
+
+The client sends `x-tz-offset` (minutes behind UTC) so days and streaks follow the student's clock. Recovery and progress keys are stored as SHA-256 hashes in the new `student_keys` table (`api/db/schema.sql`), which the server creates on start. Students saved before this version are upgraded in place the next time they load.
+
 ## Layout
 
 ```
@@ -133,6 +164,7 @@ api/src/store.js      memory and Postgres storage
 api/db/schema.sql     tables (student state as JSONB for the pilot)
 web/                  student PWA (no build step)
 web/admin/            teacher console
+web/progress/         read-only family progress page
 scripts/              droplet setup, deploy, backup, restore test
 ```
 
@@ -140,7 +172,7 @@ scripts/              droplet setup, deploy, backup, restore test
 
 - New math skill: add a generator in `skills.js`, register it in `SKILLS` with its prerequisites, add tests.
 - New fashion item or card: add to `ITEMS` / `CARDS` in `logic.js` and draw it in `avatar()` in `web/app.js`.
-- A generator must return integer answers and a final hint that states the answer. The test suite checks this across hundreds of seeds.
+- A generator returns `answer` (a number), `answerText` (how it is written, such as `3/4` or `-2`), three hints whose last one states `answerText`, and `mistakes` (likely wrong answers with a short explanation). Set `requireFraction` when the answer must be a fraction. The test suite checks every skill, level and theme across hundreds of seeds.
 
 ## Safety notes for the pilot
 

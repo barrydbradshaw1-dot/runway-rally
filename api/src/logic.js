@@ -216,7 +216,7 @@ export function giveHint(task) {
 }
 
 const PRAISE = ['Perfect cut!', 'That fits beautifully.', 'Nailed it.', 'Runway ready.', 'Exactly right.'];
-const ENCOURAGE = ['Not quite yet. Try once more, or tap Hint.', 'Close. Take a look at a hint and try again.'];
+const ENCOURAGE = ['Not quite yet. Try once more, or tap Hint.', 'Not yet. A hint can help, then try again.'];
 
 // Daily log, streak and a once-a-day mastery snapshot for the family progress page.
 function touchDay(student, now, tz) {
@@ -470,8 +470,9 @@ export function progressSummary(student, { now = Date.now(), tz = 0 } = {}) {
         .sort((a, b) => b.to - b.from - (a.to - a.from))
     : [];
   const strong = SKILL_IDS.filter((k) => s.mastery[k] >= STRONG_AT);
+  const help = needsHelp(s);
   const working = unlockedSkills(s.mastery)
-    .filter((k) => s.mastery[k] < STRONG_AT && (s.skillStats[k]?.answered ?? 0) > 0)
+    .filter((k) => s.mastery[k] < STRONG_AT && (s.skillStats[k]?.answered ?? 0) > 0 && !help.includes(k))
     .sort((a, b) => (s.lastPracticed[b] || '').localeCompare(s.lastPracticed[a] || ''));
   const pct = (m) => Math.round(m * 100);
   return {
@@ -482,7 +483,7 @@ export function progressSummary(student, { now = Date.now(), tz = 0 } = {}) {
     placement: s.placement?.status || 'not started',
     strong: strong.map((k) => SKILLS[k].name),
     workingOn: working.slice(0, 4).map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]), standard: SKILLS[k].standard })),
-    needsHelp: needsHelp(s).map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]) })),
+    needsHelp: help.map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]) })),
     improved: gains.slice(0, 3).map((g) => ({ name: SKILLS[g.k].name, from: pct(g.from), to: pct(g.to) })),
     lastActive: Object.keys(s.daily).sort().pop() || null,
   };

@@ -137,7 +137,10 @@ function exportCsv() {
 function dashboard() {
   const { students, skills, classCode, title, roster } = state.data;
   const rosterLine = roster && !roster.error ? `${roster.launched} of ${roster.enrolled} enrolled students have opened Runway Rally${roster.notLaunched ? ` · ${roster.notLaunched} have not yet` : ''}` : roster?.error ? 'Course roster is unavailable right now' : '';
-  const ids = Object.keys(skills);
+  // with 19 skills, show only the columns someone in the class has practiced (all of them if nobody has yet)
+  const allIds = Object.keys(skills);
+  const triedIds = allIds.filter((k) => students.some((s) => (s.attempts?.[k] ?? 0) > 0));
+  const ids = triedIds.length ? triedIds : allIds;
   const started = students.filter((s) => s.answered > 0);
   const accs = started.map((s) => s.accuracy).filter((a) => a !== null);
   const needHelp = students.filter((s) => s.needsHelpWith.length);
@@ -162,7 +165,7 @@ function dashboard() {
   const table = h(
     'table',
     {},
-    h('thead', {}, h('tr', {}, h('th', { text: 'Student' }), ids.map((k) => h('th', { text: skills[k] })), h('th', { text: 'Accuracy' }), h('th', { text: 'Commissions' }), h('th', { text: 'Favorite areas' }))),
+    h('thead', {}, h('tr', {}, h('th', { text: 'Student' }), ids.map((k) => h('th', { text: skills[k] })), h('th', { text: 'Accuracy' }), h('th', { text: 'Recent accuracy' }), h('th', { text: 'Skills check' }), h('th', { text: 'Commissions' }), h('th', { text: 'Favorite areas' }))),
     h(
       'tbody',
       {},
@@ -178,6 +181,8 @@ function dashboard() {
             return h('td', { class: `cell ${cls(m, tried)}` }, tried ? pct(m) : '—', h('span', { class: 'sub', text: !tried ? 'not tried' : flagged ? 'needs support' : `${s.attempts[k]} answered` }));
           }),
           h('td', { text: s.accuracy === null ? '—' : `${s.accuracy}%` }),
+          h('td', { text: s.recentAccuracy === null || s.recentAccuracy === undefined ? '—' : `${s.recentAccuracy}%` }),
+          h('td', { text: s.placement || '—' }),
           h('td', { text: String(s.commissions) }),
           h('td', { text: s.topAreas.length ? s.topAreas.map((a) => AREA_LABELS[a] || a).join(', ') : '—' }),
         ),
