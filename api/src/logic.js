@@ -409,7 +409,10 @@ export function finishPlacement(student, { now = Date.now() } = {}) {
 export function placementSummary(student) {
   const res = student.placement?.results || {};
   const strong = SKILL_IDS.filter((s) => res[s] === 'known');
-  const next = unlockedSkills(student.mastery).filter((s) => student.mastery[s] < STRONG_AT).sort((a, b) => depthOf(a) - depthOf(b));
+  // what practice will work on first: open skills she did not show she knows, foundations first
+  const next = unlockedSkills(student.mastery)
+    .filter((s) => res[s] !== 'known' && student.mastery[s] < STRONG_AT)
+    .sort((a, b) => depthOf(a) - depthOf(b) || student.mastery[a] - student.mastery[b]);
   return { strong: strong.map((s) => SKILLS[s].name), startingWith: next.slice(0, 3).map((s) => SKILLS[s].name) };
 }
 
@@ -482,9 +485,10 @@ export function progressSummary(student, { now = Date.now(), tz = 0 } = {}) {
     thisWeek: { minutes, answered, correct, daysActive: days.length },
     placement: s.placement?.status || 'not started',
     strong: strong.map((k) => SKILLS[k].name),
-    workingOn: working.slice(0, 4).map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]), standard: SKILLS[k].standard })),
-    needsHelp: help.map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]) })),
-    improved: gains.slice(0, 3).map((g) => ({ name: SKILLS[g.k].name, from: pct(g.from), to: pct(g.to) })),
+    strongStandards: [...new Set(strong.flatMap((k) => SKILLS[k].codes))].sort(),
+    workingOn: working.slice(0, 4).map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]), standard: SKILLS[k].standard, grade: SKILLS[k].grade })),
+    needsHelp: help.map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]), standard: SKILLS[k].standard, grade: SKILLS[k].grade })),
+    improved: gains.slice(0, 3).map((g) => ({ name: SKILLS[g.k].name, from: pct(g.from), to: pct(g.to), standard: SKILLS[g.k].standard })),
     lastActive: Object.keys(s.daily).sort().pop() || null,
   };
 }

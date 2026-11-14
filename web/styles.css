@@ -194,3 +194,4 @@ input[readonly] { width: 100%; min-height: 48px; padding: 10px 12px; border-radi
 .stat strong { display: block; font-size: 1.6rem; }
 .stat span { font-size: 0.85rem; color: var(--soft); }
 .skill-row { display: flex; justify-content: space-between; gap: 10px; }
+.block { display: block; }

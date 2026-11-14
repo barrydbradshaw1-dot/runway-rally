@@ -33,31 +33,44 @@ const neg = (n) => (n < 0 ? `(${n})` : String(n)); // wrap negatives inside expr
 export const THEMES = ['jewelry', 'fabric', 'runway'];
 const say = (theme, byTheme) => byTheme[theme] ?? byTheme.fabric;
 
-// Georgia K-12 Mathematics Standards (2021). Grade 7 codes were checked against the state text as
-// reproduced in Cobb County's grade 7 framework. Earlier-grade skills name the grade and strand only:
-// look up the exact code before printing it in a report for a school.
+// Georgia's K-12 Mathematics Standards (adopted 2021, taught from fall 2023). Codes were checked on
+// Nov 14, 2026 against GaDOE's grade 5 and grade 7 curriculum maps (2023), the K-8 standards document,
+// and the standards registry at case.georgiastandards.org. `codes` lists every Georgia standard a skill
+// practices, earliest grade first; `grade` is the grade where Georgia first teaches it.
+// Students never see codes. The family page and teacher console do.
+const sk = (name, prereq, codes, grade) => ({ name, prereq, codes, grade, standard: codes.join(', ') });
 export const SKILLS = {
   // foundations (grades 3 to 5)
-  mult_facts: { name: 'Multiplying', prereq: [], standard: 'Grade 3 to 4, Numerical Reasoning' },
-  div_facts: { name: 'Dividing into equal groups', prereq: ['mult_facts'], standard: 'Grade 3 to 4, Numerical Reasoning' },
-  frac_equiv: { name: 'Equivalent fractions', prereq: ['mult_facts'], standard: 'Grade 4, Numerical Reasoning' },
-  frac_simplify: { name: 'Simplifying fractions', prereq: ['frac_equiv', 'div_facts'], standard: 'Grade 4 to 6, Numerical Reasoning' },
-  decimals: { name: 'Money and decimals', prereq: [], standard: 'Grade 5, Numerical Reasoning' },
-  frac_part: { name: 'Fractions of a length', prereq: ['div_facts'], standard: 'Grade 5, Numerical Reasoning' },
-  frac_add: { name: 'Adding fractions', prereq: ['frac_part'], standard: 'Grade 4, Numerical Reasoning' },
-  frac_add_unlike: { name: 'Adding fractions with different bottoms', prereq: ['frac_add', 'frac_equiv'], standard: 'Grade 5, Numerical Reasoning' },
-  frac_mult: { name: 'Multiplying fractions', prereq: ['frac_part', 'frac_simplify'], standard: 'Grade 5, Numerical Reasoning' },
-  // grades 6 to 7
-  ratio: { name: 'Ratios', prereq: ['mult_facts'], standard: 'Grade 6, Proportional Reasoning' },
-  unit_rate: { name: 'Unit rates and best buys', prereq: ['ratio', 'div_facts'], standard: '7.PAR.4' },
-  fdp_convert: { name: 'Fractions, decimals and percents', prereq: ['frac_equiv', 'decimals'], standard: '7.NR.1' },
-  percent_of: { name: 'Percent of a number', prereq: ['fdp_convert'], standard: '7.PAR.4' },
-  percent: { name: 'Percent and discounts', prereq: ['percent_of'], standard: '7.PAR.4' },
-  int_add: { name: 'Adding and subtracting negatives', prereq: [], standard: '7.NR.1' },
-  int_mult: { name: 'Multiplying and dividing negatives', prereq: ['int_add', 'mult_facts'], standard: '7.NR.1' },
-  expr_eval: { name: 'Evaluating expressions', prereq: ['mult_facts'], standard: 'Grade 6, Patterning and Algebraic Reasoning; 7.PAR.2' },
-  eq_one_step: { name: 'One-step equations', prereq: ['expr_eval', 'div_facts'], standard: 'Grade 6, Patterning and Algebraic Reasoning' },
-  eq_two_step: { name: 'Two-step equations', prereq: ['eq_one_step', 'int_mult'], standard: '7.PAR.3' },
+  mult_facts: sk('Multiplying', [], ['3.PAR.3'], 3),
+  div_facts: sk('Dividing into equal groups', ['mult_facts'], ['3.PAR.3'], 3),
+  frac_equiv: sk('Equivalent fractions', ['mult_facts'], ['3.NR.4', '4.NR.4'], 3),
+  frac_simplify: sk('Simplifying fractions', ['frac_equiv', 'div_facts'], ['4.NR.4'], 4),
+  decimals: sk('Money and decimals', [], ['5.NR.4'], 5),
+  frac_part: sk('Fractions of a length', ['div_facts'], ['5.NR.3'], 5),
+  frac_add: sk('Adding fractions', ['frac_part'], ['4.NR.4'], 4),
+  frac_add_unlike: sk('Adding fractions with different bottoms', ['frac_add', 'frac_equiv'], ['5.NR.3'], 5),
+  // grade 6
+  frac_mult: sk('Multiplying fractions', ['frac_part', 'frac_simplify'], ['5.NR.3', '6.NR.1'], 5),
+  frac_div: sk('Dividing fractions', ['frac_mult'], ['6.NR.1'], 6),
+  dec_mult_div: sk('Multiplying and dividing decimals', ['decimals', 'mult_facts', 'div_facts'], ['6.NR.1'], 6),
+  ratio: sk('Ratios', ['mult_facts'], ['6.NR.4'], 6),
+  unit_rate: sk('Unit rates and best buys', ['ratio', 'div_facts'], ['6.NR.4', '7.PAR.4'], 6),
+  fdp_convert: sk('Fractions, decimals and percents', ['frac_equiv', 'decimals'], ['6.NR.4', '7.NR.1'], 6),
+  percent_of: sk('Percent of a number', ['fdp_convert'], ['6.NR.4'], 6),
+  expr_eval: sk('Evaluating expressions', ['mult_facts'], ['6.PAR.6'], 6),
+  eq_one_step: sk('One-step equations', ['expr_eval', 'div_facts'], ['6.PAR.7'], 6),
+  inequalities: sk('Inequalities', ['eq_one_step'], ['6.PAR.7', '7.PAR.3'], 6),
+  coord_plane: sk('The coordinate plane', ['int_add'], ['6.PAR.8'], 6),
+  area_volume: sk('Area, volume and surface area', ['mult_facts', 'div_facts'], ['6.GSR.5'], 6),
+  // grade 7
+  percent: sk('Percent and discounts', ['percent_of'], ['7.PAR.4'], 7),
+  int_add: sk('Adding and subtracting negatives', [], ['6.NR.3', '7.NR.1'], 6),
+  int_mult: sk('Multiplying and dividing negatives', ['int_add', 'mult_facts'], ['7.NR.1'], 7),
+  expr_equiv: sk('Simplifying and expanding expressions', ['expr_eval', 'int_mult'], ['7.PAR.2'], 7),
+  eq_two_step: sk('Two-step equations', ['eq_one_step', 'int_mult'], ['7.PAR.3'], 7),
+  proportion: sk('Proportions and scale drawings', ['unit_rate', 'dec_mult_div'], ['7.PAR.4'], 7),
+  circles: sk('Circles', ['dec_mult_div'], ['7.GSR.5'], 7),
+  probability: sk('Probability', ['frac_simplify', 'frac_mult'], ['7.PR.6'], 7),
 };
 export const SKILL_IDS = Object.keys(SKILLS);
 
@@ -98,6 +111,15 @@ const STORIES = {
   expr_eval: 'Every designer has a price formula. Plug in the numbers.',
   eq_one_step: 'A receipt lost one number. Work backwards to find it.',
   eq_two_step: 'An invoice lost a number. Undo the steps to find it.',
+  frac_div: 'There is only so much material. How many pieces can you cut?',
+  dec_mult_div: 'The boutique register handles prices, splits and fabric by the yard.',
+  inequalities: 'Budgets and goals: find the limit you have to stay under, or beat.',
+  expr_equiv: 'The order forms are messy. Tidy the formulas without changing what they mean.',
+  proportion: 'Plans and sketches are drawn to scale. Find the real sizes.',
+  area_volume: 'Every piece needs the right amount of fabric, and every box the right size.',
+  circles: 'Round designs need careful measuring.',
+  coord_plane: 'The studio is laid out on a grid. Find the distances.',
+  probability: 'Mystery bags are the hit of the season. What are the chances?',
 };
 export const storyFor = (skill) => STORIES[skill];
 
@@ -686,6 +708,469 @@ function eqTwoStep(level, theme, rng) {
   };
 }
 
+// ---------- grade 6 and 7 additions ----------
+// 6.NR.1: dividing fractions
+function fracDiv(level, theme, rng) {
+  if (level === 1) {
+    const w = int(rng, 2, 6);
+    const d = pick(rng, [2, 3, 4, 5, 6, 8]);
+    return {
+      prompt: say(theme, {
+        jewelry: `You have ${w} meters of chain. Each anklet uses 1/${d} meter. How many anklets can you make?`,
+        fabric: `You have ${w} yards of ribbon. Each bow uses 1/${d} yard. How many bows can you make?`,
+        runway: `The runway show lasts ${w} hours. Each look gets 1/${d} hour. How many looks fit?`,
+      }),
+      ...intAns(w * d),
+      hints: [
+        `How many 1/${d}s fit in ${w}? That is ${w} ÷ 1/${d}.`,
+        `Each whole holds ${d} pieces of size 1/${d}. Dividing by 1/${d} is the same as multiplying by ${d}.`,
+        `${w} × ${d} = ${w * d}.`,
+      ],
+      mistakes: [
+        { value: w / d, text: `That splits ${w} into ${d} parts. The question asks how many 1/${d}-size pieces fit, so multiply by ${d}.` },
+        { value: w + d, text: `You added. Each whole holds ${d} pieces, so multiply.` },
+      ],
+    };
+  }
+  const b = level === 2 ? pick(rng, [2, 3, 4]) : pick(rng, [3, 4, 5, 6]);
+  let a = level === 2 ? int(rng, 1, b) : int(rng, b + 1, 3 * b);
+  while (gcd(a, b) !== 1) a += 1;
+  const d = level === 2 ? pick(rng, [4, 6, 8]) : pick(rng, [5, 6, 8, 9, 10]);
+  let c = int(rng, 1, d - 1);
+  while (gcd(c, d) !== 1) c -= 1;
+  const ans = fracAns(a * d, b * c);
+  const raw = `${a * d}/${b * c}`;
+  return {
+    prompt: say(theme, {
+      jewelry: `You have ${a}/${b} pound of beads. Each bag holds ${c}/${d} pound. How many bags can you fill? Answer as a fraction or whole number.`,
+      fabric: `You have ${a}/${b} yard of lace. Each cuff uses ${c}/${d} yard. How many cuffs can you make? Answer as a fraction or whole number.`,
+      runway: `There are ${a}/${b} hour left. Each walk takes ${c}/${d} hour. How many walks fit? Answer as a fraction or whole number.`,
+    }),
+    ...ans,
+    hints: [
+      `"How many ${c}/${d}s fit in ${a}/${b}?" means ${a}/${b} ÷ ${c}/${d}.`,
+      `Keep the first fraction, change ÷ to ×, and flip the second: ${a}/${b} × ${d}/${c}.`,
+      `${a} × ${d} = ${a * d} and ${b} × ${c} = ${b * c}, so the answer is ${raw}${raw !== ans.answerText ? ` = ${ans.answerText}` : ''}.`,
+    ],
+    mistakes: [
+      { value: (a * c) / (b * d), text: 'You multiplied straight across. To divide, flip the second fraction first, then multiply.' },
+      { value: (b * c) / (a * d), text: 'You flipped the first fraction. Keep the first one and flip the one you divide by.' },
+    ],
+  };
+}
+
+// 6.NR.1: multiplying and dividing decimals
+function decMultDiv(level, theme, rng) {
+  if (level === 1) {
+    const p = int(rng, 105, 895);
+    const n = int(rng, 2, 6);
+    return {
+      prompt: say(theme, {
+        jewelry: `One charm costs $${money(p)}. How much do ${n} charms cost?`,
+        fabric: `One spool of thread costs $${money(p)}. How much do ${n} spools cost?`,
+        runway: `One pair of lashes costs $${money(p)}. How much for ${n} models?`,
+      }),
+      ...decAns(p * n),
+      hints: [
+        `Multiply: ${money(p)} × ${n}.`,
+        `Think in cents: ${p} × ${n} = ${p * n} cents.`,
+        `${p * n} cents is $${money(p * n)}.`,
+      ],
+      mistakes: [{ value: (p + n) / 100, text: `You added ${n}. ${n} items at the same price means multiply.` }],
+    };
+  }
+  if (level === 2) {
+    const n = int(rng, 3, 8);
+    const each = int(rng, 105, 995);
+    const total = each * n;
+    return {
+      prompt: say(theme, {
+        jewelry: `${n} friends split a $${money(total)} bead order evenly. How much does each pay?`,
+        fabric: `A $${money(total)} fabric bill is shared by ${n} designers. How much does each pay?`,
+        runway: `${n} models share a $${money(total)} taxi fare evenly. How much does each pay?`,
+      }),
+      ...decAns(each),
+      hints: [
+        `Divide: ${money(total)} ÷ ${n}.`,
+        `Think in cents: ${total} ÷ ${n} = ${each} cents.`,
+        `Each pays $${money(each)}.`,
+      ],
+      mistakes: [{ value: (total * n) / 100, text: 'You multiplied. Sharing a bill means divide.' }],
+    };
+  }
+  let t = int(rng, 11, 39); // tenths of a yard
+  if (t % 10 === 0) t += 1; // keep one decimal place
+  const c = 10 * int(rng, 12, 60); // price in cents, a multiple of 10
+  const cents = (t * c) / 10;
+  return {
+    prompt: say(theme, {
+      jewelry: `Silver wire costs $${money(c)} per meter. You buy ${t / 10} meters. What is the cost?`,
+      fabric: `Velvet costs $${money(c)} per yard. You buy ${t / 10} yards. What is the cost?`,
+      runway: `Runway tape costs $${money(c)} per meter. You need ${t / 10} meters. What is the cost?`,
+    }),
+    ...decAns(cents),
+    hints: [
+      `Multiply: ${t / 10} × ${money(c)}.`,
+      `Ignore the decimal points first: ${t} × ${c / 10} = ${t * (c / 10)}. Then count decimal places: one in ${t / 10} and one in ${(c / 100).toFixed(1)}, so two in all.`,
+      `${t / 10} × ${money(c)} = $${money(cents)}.`,
+    ],
+    mistakes: [],
+  };
+}
+
+// 6.PAR.7 and 7.PAR.3: inequalities (the answer is the boundary, or the smallest whole number that works)
+function inequalities(level, theme, rng) {
+  if (level === 1) {
+    const b = int(rng, 3, 20);
+    const x = int(rng, 4, 30);
+    const c = x + b;
+    return {
+      prompt: say(theme, {
+        jewelry: `You have ${b} beads and need more than ${c} for a necklace. Solve b + ${b} > ${c}. b > what number?`,
+        fabric: `You have ${b} feet of trim and need more than ${c}. Solve t + ${b} > ${c}. t > what number?`,
+        runway: `${b} seats are filled and the show needs more than ${c}. Solve s + ${b} > ${c}. s > what number?`,
+      }),
+      ...intAns(x),
+      hints: [
+        'Solve it like an equation. Undo the + by subtracting on both sides.',
+        `Subtract ${b}: ${c} − ${b} = ${x}.`,
+        `So the answer is greater than ${x}. The boundary is ${x}.`,
+      ],
+      mistakes: [{ value: c + b, text: `To undo + ${b}, subtract ${b}, don't add it.` }],
+    };
+  }
+  if (level === 2) {
+    const a = int(rng, 2, 9);
+    const x = int(rng, 3, 15);
+    const c = a * x;
+    return {
+      prompt: say(theme, {
+        jewelry: `Each ring costs $${a}. You can spend at most $${c}. Solve ${a}r ≤ ${c}. r ≤ what number?`,
+        fabric: `Each patch costs $${a}. Your limit is $${c}. Solve ${a}p ≤ ${c}. p ≤ what number?`,
+        runway: `Each look takes ${a} minutes. The show can run at most ${c} minutes. Solve ${a}m ≤ ${c}. m ≤ what number?`,
+      }),
+      ...intAns(x),
+      hints: [
+        `Undo the multiplying by dividing both sides by ${a}. Dividing by a positive number keeps the sign the same.`,
+        `${c} ÷ ${a} = ${x}.`,
+        `So the answer is at most ${x}. The boundary is ${x}.`,
+      ],
+      mistakes: [{ value: c - a, text: `${a}r means ${a} times r. Undo it by dividing, not subtracting.` }],
+    };
+  }
+  const a = int(rng, 3, 9);
+  const b = int(rng, 10, 40);
+  const goal = int(rng, 30, 120);
+  const exact = (goal + b) / a;
+  const ans = Math.floor(exact) + 1; // smallest whole number with a·n − b > goal
+  return {
+    prompt: say(theme, {
+      jewelry: `Bracelets sell for $${a} each and the craft fair table costs $${b}. How many bracelets must you sell to make more than $${goal} profit? Solve ${a}n − ${b} > ${goal}. What is the smallest whole number that works?`,
+      fabric: `Tote bags sell for $${a} each and the booth costs $${b}. How many must you sell to make more than $${goal} profit? Solve ${a}n − ${b} > ${goal}. What is the smallest whole number that works?`,
+      runway: `Show tickets sell for $${a} each and the lights cost $${b}. How many tickets must you sell to make more than $${goal}? Solve ${a}n − ${b} > ${goal}. What is the smallest whole number that works?`,
+    }),
+    ...intAns(ans),
+    hints: [
+      `First add ${b} to both sides: ${a}n > ${goal + b}.`,
+      `Divide by ${a}: n > ${Number.isInteger(exact) ? exact : `${goal + b}/${a}, which is about ${exact.toFixed(2)}`}.`,
+      `n has to be more than that, so the smallest whole number is ${ans}.`,
+    ],
+    mistakes: [
+      { value: Math.floor(exact), text: Number.isInteger(exact) ? `At exactly ${exact} you make exactly $${goal}. You need more than that.` : `${Math.floor(exact)} is not enough. Check: ${a} × ${Math.floor(exact)} − ${b} is not more than ${goal}. Round up.` },
+      { value: Math.floor((goal - b) / a) + 1, text: `The table cost is subtracted, so add ${b} to both sides first.` },
+    ],
+  };
+}
+
+// 7.PAR.2: equivalent expressions
+function exprEquiv(level, theme, rng) {
+  if (level === 1) {
+    const a = int(rng, 2, 9);
+    const b = int(rng, 2, 9);
+    const k = int(rng, 2, 15);
+    return {
+      prompt: say(theme, {
+        jewelry: `A tray has ${a}x rings, then ${k} more pearls and ${b}x more rings. Simplify ${a}x + ${k} + ${b}x = ?x + ${k}. What number goes in front of x?`,
+        fabric: `A pattern uses ${a}x inches, then ${k} inches, then ${b}x inches. Simplify ${a}x + ${k} + ${b}x = ?x + ${k}. What number goes in front of x?`,
+        runway: `A show has ${a}x looks, ${k} bows, then ${b}x more looks. Simplify ${a}x + ${k} + ${b}x = ?x + ${k}. What number goes in front of x?`,
+      }),
+      ...intAns(a + b),
+      hints: [
+        `Like terms have the same letter. ${a}x and ${b}x are like terms; ${k} is not.`,
+        `Add the x terms: ${a}x + ${b}x.`,
+        `${a} + ${b} = ${a + b}, so it is ${a + b}x + ${k}.`,
+      ],
+      mistakes: [{ value: a + b + k, text: `${k} has no x, so it is not a like term. Add only the numbers in front of x.` }],
+    };
+  }
+  const a = level === 2 ? int(rng, 2, 9) : -int(rng, 2, 9);
+  const b = level === 2 ? int(rng, 2, 12) : -int(rng, 2, 12);
+  const inside = `x ${b < 0 ? '−' : '+'} ${Math.abs(b)}`;
+  const prod = a * b;
+  return {
+    prompt:
+      level === 2
+        ? say(theme, {
+            jewelry: `Each of ${a} gift boxes holds x rings and ${b} earrings: ${a}(${inside}). Fill in the blank: ${a}(${inside}) = ${a}x + ?`,
+            fabric: `Each of ${a} outfits uses x buttons and ${b} snaps: ${a}(${inside}). Fill in the blank: ${a}(${inside}) = ${a}x + ?`,
+            runway: `Each of ${a} models wears x pins and ${b} clips: ${a}(${inside}). Fill in the blank: ${a}(${inside}) = ${a}x + ?`,
+          })
+        : `Use the distributive property. Fill in the blank: ${a}(${inside}) = ${a}x + ?`,
+    ...intAns(prod),
+    hints: [
+      `Multiply ${neg(a)} by each term inside the parentheses.`,
+      `${neg(a)} × x = ${a}x and ${neg(a)} × ${neg(b)} = ?`,
+      `${neg(a)} × ${neg(b)} = ${prod}, so ${a}(${inside}) = ${a}x + ${neg(prod)}.`,
+    ],
+    mistakes: [
+      { value: b, text: `Multiply ${neg(a)} by both terms inside, not just x.` },
+      { value: a + b, text: `You added ${neg(a)} and ${neg(b)}. The distributive property multiplies.` },
+    ],
+  };
+}
+
+// 7.PAR.4: proportional relationships and scale drawings
+function proportion(level, theme, rng) {
+  if (level === 1) {
+    const k = 50 * int(rng, 3, 18); // cents per unit
+    const x1 = int(rng, 2, 5);
+    const x2 = x1 + int(rng, 1, 4);
+    return {
+      prompt: say(theme, {
+        jewelry: `${x1} meters of chain cost $${money(k * x1)} and ${x2} meters cost $${money(k * x2)}. The cost is proportional. What is the unit rate (dollars per meter)?`,
+        fabric: `${x1} yards of silk cost $${money(k * x1)} and ${x2} yards cost $${money(k * x2)}. The cost is proportional. What is the cost per yard?`,
+        runway: `${x1} hours of lighting cost $${money(k * x1)} and ${x2} hours cost $${money(k * x2)}. The cost is proportional. What is the cost per hour?`,
+      }),
+      ...decAns(k),
+      hints: [
+        'In a proportional relationship, y ÷ x is the same every time. That number is the unit rate, k.',
+        `Divide: ${money(k * x1)} ÷ ${x1}.`,
+        `k = $${money(k)}. Check: ${money(k * x2)} ÷ ${x2} gives the same.`,
+      ],
+      mistakes: [
+        { value: (k * x1) / 100, text: `That is the cost for ${x1}. The unit rate is the cost for 1, so divide by ${x1}.` },
+        { value: (k * (x2 - x1)) / 100, text: `That is the cost of the extra ${x2 - x1}. Divide a cost by its amount to get the cost for 1.` },
+      ],
+    };
+  }
+  if (level === 2) {
+    const s = pick(rng, [2, 4, 5, 6, 8, 10]);
+    const halves = int(rng, 3, 19);
+    const d = halves / 2;
+    const real = halves * s / 2;
+    return {
+      prompt: say(theme, {
+        jewelry: `On a display plan, 1 cm stands for ${s} cm of real case. The case is ${d} cm long on the plan. How long is the real case, in cm?`,
+        fabric: `On a pattern sketch, 1 inch stands for ${s} inches of fabric. A sleeve is ${d} inches on the sketch. How long is the real sleeve?`,
+        runway: `On a stage plan, 1 cm stands for ${s} meters. The runway is ${d} cm on the plan. How long is the real runway, in meters?`,
+      }),
+      ...(Number.isInteger(real) ? intAns(real) : decAns(Math.round(real * 100))),
+      hints: [
+        `Every 1 unit on the drawing is ${s} real units, so multiply by ${s}.`,
+        `${d} × ${s}.`,
+        `${d} × ${s} = ${Number.isInteger(real) ? real : money(Math.round(real * 100))}.`,
+      ],
+      mistakes: [
+        { value: d / s, text: `The drawing is smaller than the real thing, so the real length is bigger. Multiply by ${s}.` },
+        { value: d + s, text: `Scale means "times ${s}", not "plus ${s}".` },
+      ],
+    };
+  }
+  const a = int(rng, 2, 5);
+  let b = int(rng, 3, 11);
+  if (b === a) b += 1;
+  const m = int(rng, 3, 6);
+  return {
+    prompt: say(theme, {
+      jewelry: `${a} necklaces need ${b} meters of chain. At the same rate, how many meters for ${a * m} necklaces?`,
+      fabric: `${a} dresses need ${b} yards of fabric. At the same rate, how many yards for ${a * m} dresses?`,
+      runway: `${a} shows need ${b} hours of rehearsal. At the same rate, how many hours for ${a * m} shows?`,
+    }),
+    ...intAns(b * m),
+    hints: [
+      `Set up equal ratios: ${a}/${b} = ${a * m}/?`,
+      `${a * m} is ${m} times ${a}, so the answer is ${m} times ${b}.`,
+      `${b} × ${m} = ${b * m}.`,
+    ],
+    mistakes: [
+      { value: b + (a * m - a), text: `You added ${a * m - a}. Proportions grow by multiplying: ${a * m} is ${m} times ${a}.` },
+      { value: (a * m * a) / b, text: 'You flipped the ratio. Keep the same thing on top in both ratios.' },
+    ],
+  };
+}
+
+// 6.GSR.5: area, volume and surface area
+function areaVolume(level, theme, rng) {
+  if (level === 1) {
+    const b = 2 * int(rng, 2, 10);
+    const h = int(rng, 3, 12);
+    return {
+      prompt: say(theme, {
+        jewelry: `A triangle pendant has a base of ${b} mm and a height of ${h} mm. What is its area in square mm?`,
+        fabric: `A triangle scarf has a base of ${b} inches and a height of ${h} inches. What is its area in square inches?`,
+        runway: `A triangle banner has a base of ${b} feet and a height of ${h} feet. What is its area in square feet?`,
+      }),
+      ...intAns((b * h) / 2),
+      hints: [
+        'A triangle is half of a rectangle with the same base and height.',
+        `Rectangle: ${b} × ${h} = ${b * h}. Now take half.`,
+        `${b * h} ÷ 2 = ${(b * h) / 2}.`,
+      ],
+      mistakes: [{ value: b * h, text: 'That is the whole rectangle. A triangle is half of it, so divide by 2.' }],
+    };
+  }
+  const l = int(rng, 2, 9);
+  const w = int(rng, 2, 8);
+  const h = int(rng, 2, 7);
+  const vol = l * w * h;
+  const sa = 2 * (l * w + l * h + w * h);
+  const what = say(theme, { jewelry: 'jewelry box', fabric: 'gift box', runway: 'shoe box' });
+  if (level === 2) {
+    return {
+      prompt: `A ${what} is ${l} inches long, ${w} inches wide and ${h} inches tall. What is its volume in cubic inches?`,
+      ...intAns(vol),
+      hints: ['Volume of a box is length × width × height.', `${l} × ${w} = ${l * w} for the bottom layer.`, `${l * w} × ${h} = ${vol} cubic inches.`],
+      mistakes: [
+        { value: l + w + h, text: 'You added the sides. Volume multiplies length, width and height.' },
+        { value: l * w, text: `That is one layer. There are ${h} layers, so multiply by ${h}.` },
+        { value: sa, text: 'That is the surface area, the wrapping paper. Volume is how much fits inside.' },
+      ],
+    };
+  }
+  return {
+    prompt: `You want to cover a ${what} with paper. It is ${l} inches long, ${w} inches wide and ${h} inches tall. What is its surface area in square inches?`,
+    ...intAns(sa),
+    hints: [
+      'A box has 6 faces in 3 matching pairs: top and bottom, front and back, two ends.',
+      `One of each: ${l}×${w} = ${l * w}, ${l}×${h} = ${l * h}, ${w}×${h} = ${w * h}. Add them, then double.`,
+      `${l * w} + ${l * h} + ${w * h} = ${sa / 2}, and doubled is ${sa}.`,
+    ],
+    mistakes: [
+      { value: vol, text: 'That is the volume. Surface area adds up the area of all 6 faces.' },
+      { value: sa / 2, text: 'That covers only 3 faces. Each face has a matching partner, so double it.' },
+    ],
+  };
+}
+
+// 7.GSR.5: circles (use 3.14 for pi)
+function circles(level, theme, rng) {
+  const thing = say(theme, { jewelry: 'round pendant', fabric: 'circle skirt', runway: 'round stage' });
+  const unit = say(theme, { jewelry: 'cm', fabric: 'inches', runway: 'feet' });
+  if (level === 1) {
+    const d = int(rng, 2, 20);
+    return {
+      prompt: `A ${thing} has a diameter of ${d} ${unit}. Use 3.14 for pi. What is its circumference, the distance around?`,
+      ...decAns(314 * d),
+      hints: ['Circumference = pi × diameter.', `3.14 × ${d}.`, `3.14 × ${d} = ${money(314 * d)} ${unit}.`],
+      mistakes: [{ value: (314 * d) / 200, text: 'You used half the diameter. Circumference is pi times the whole diameter.' }],
+    };
+  }
+  const r = int(rng, 2, 12);
+  if (level === 2) {
+    return {
+      prompt: `A ${thing} has a radius of ${r} ${unit}. Use 3.14 for pi. What is its circumference?`,
+      ...decAns(628 * r),
+      hints: [`The diameter is twice the radius: ${2 * r} ${unit}.`, `Circumference = 3.14 × ${2 * r}.`, `3.14 × ${2 * r} = ${money(628 * r)} ${unit}.`],
+      mistakes: [{ value: (314 * r) / 100, text: 'You used the radius as the diameter. Double the radius first.' }],
+    };
+  }
+  return {
+    prompt: `A ${thing} has a radius of ${r} ${unit}. Use 3.14 for pi. What is its area in square ${unit}?`,
+    ...decAns(314 * r * r),
+    hints: ['Area of a circle = pi × radius × radius.', `3.14 × ${r} × ${r} = 3.14 × ${r * r}.`, `3.14 × ${r * r} = ${money(314 * r * r)} square ${unit}.`],
+    mistakes: [
+      { value: (628 * r) / 100, text: 'That is the circumference. Area is pi × radius × radius.' },
+      { value: (314 * 4 * r * r) / 100, text: 'You squared the diameter. Use the radius.' },
+    ],
+  };
+}
+
+// 6.PAR.8: the coordinate plane
+function coordPlane(level, theme, rng) {
+  const place = say(theme, { jewelry: 'a display grid', fabric: 'a cutting mat grid', runway: 'the stage grid' });
+  if (level < 3) {
+    const y = level === 1 ? int(rng, 1, 9) : int(rng, -9, 9);
+    const x1 = level === 1 ? int(rng, 1, 6) : -int(rng, 1, 9);
+    const x2 = level === 1 ? x1 + int(rng, 2, 9) : int(rng, 1, 9);
+    const dist = x2 - x1;
+    return {
+      prompt: `On ${place}, one mark is at (${x1}, ${y}) and another is at (${x2}, ${y}). How many units apart are they?`,
+      ...intAns(dist),
+      hints: [
+        'The y-values match, so the points are on the same horizontal line. Count across.',
+        level === 1 ? `Subtract the x-values: ${x2} − ${x1}.` : `From ${x1} to 0 is ${-x1} units. From 0 to ${x2} is ${x2} units.`,
+        `${level === 1 ? `${x2} − ${x1}` : `${-x1} + ${x2}`} = ${dist} units.`,
+      ],
+      mistakes: level === 1 ? [{ value: x1 + x2, text: 'Distance is the difference between the x-values, so subtract.' }] : [{ value: Math.abs(x2 + x1), text: `The points are on opposite sides of 0. Add the distances to 0: ${-x1} + ${x2}.` }],
+    };
+  }
+  const a = int(rng, 1, 6);
+  const c = int(rng, 1, 6);
+  const b = int(rng, 1, 6);
+  const e = int(rng, 1, 6);
+  const w = a + c;
+  const h = b + e;
+  return {
+    prompt: `On ${place}, a rectangle has corners at (−${a}, ${b}), (${c}, ${b}), (${c}, −${e}) and (−${a}, −${e}). What is its perimeter?`,
+    ...intAns(2 * (w + h)),
+    hints: [
+      `Width: from x = −${a} to x = ${c} is ${a} + ${c} = ${w}.`,
+      `Height: from y = −${e} to y = ${b} is ${e} + ${b} = ${h}.`,
+      `Perimeter = 2 × (${w} + ${h}) = ${2 * (w + h)}.`,
+    ],
+    mistakes: [
+      { value: w * h, text: 'That is the area. Perimeter is the distance around.' },
+      { value: w + h, text: 'That is only two sides. A rectangle has four, so double it.' },
+      { value: 2 * (Math.abs(c - a) + Math.abs(b - e)), text: 'The corners are on both sides of 0, so add the distances to 0.' },
+    ],
+  };
+}
+
+// 7.PR.6: probability
+function probability(level, theme, rng) {
+  const [itemA, itemB, itemC] = say(theme, { jewelry: ['pink', 'purple', 'gold'], fabric: ['striped', 'plain', 'floral'], runway: ['red', 'black', 'white'] });
+  const things = say(theme, { jewelry: 'beads', fabric: 'scraps', runway: 'tickets' });
+  const container = say(theme, { jewelry: 'bag', fabric: 'bin', runway: 'hat' });
+  if (level === 1) {
+    const p = int(rng, 1, 9);
+    const q = int(rng, 1, 9);
+    const ans = fracAns(p, p + q);
+    return {
+      prompt: `A ${container} has ${p} ${itemA} and ${q} ${itemB} ${things}. You pick one without looking. What is the probability it is ${itemA}? Answer as a fraction.`,
+      ...ans,
+      hints: ['Probability = favorable outcomes ÷ total outcomes.', `There are ${p} ${itemA} out of ${p} + ${q} = ${p + q} in all.`, `${p}/${p + q}${`${p}/${p + q}` !== ans.answerText ? ` = ${ans.answerText}` : ''}.`],
+      mistakes: [{ value: p / q, text: `Compare ${itemA} to all the ${things}, not just to the ${itemB} ones.` }],
+    };
+  }
+  if (level === 2) {
+    const p = int(rng, 1, 8);
+    const q = int(rng, 1, 8);
+    const r = int(rng, 1, 8);
+    const t = p + q + r;
+    const ans = fracAns(t - r, t);
+    return {
+      prompt: `A ${container} has ${p} ${itemA}, ${q} ${itemB} and ${r} ${itemC} ${things}. You pick one without looking. What is the probability it is NOT ${itemC}? Answer as a fraction.`,
+      ...ans,
+      hints: [`"Not ${itemC}" means ${itemA} or ${itemB}.`, `${p} + ${q} = ${t - r} out of ${t} in all.`, `${t - r}/${t}${`${t - r}/${t}` !== ans.answerText ? ` = ${ans.answerText}` : ''}.`],
+      mistakes: [{ value: r / t, text: `That is the chance it IS ${itemC}. You want every other color.` }],
+    };
+  }
+  const p = int(rng, 1, 4);
+  const q = int(rng, 1, 6);
+  const t = p + q;
+  const k = int(rng, 3, 12);
+  const n = t * k;
+  return {
+    prompt: `A ${container} has ${p} ${itemA} and ${q} ${itemB} ${things}. You pick one, put it back, and do this ${n} times. About how many times should you expect ${itemA}?`,
+    ...intAns(p * k),
+    hints: [`The chance of ${itemA} each time is ${p}/${t}.`, `Expected count = probability × number of tries = ${p}/${t} × ${n}.`, `${n} ÷ ${t} = ${k}, and ${k} × ${p} = ${p * k}.`],
+    mistakes: [
+      { value: n / p, text: `Multiply the chance, ${p}/${t}, by ${n}.` },
+      { value: q * k, text: `That is how many ${itemB} to expect. The question asks about ${itemA}.` },
+    ],
+  };
+}
+
 const GENERATORS = {
   mult_facts: multFacts,
   div_facts: divFacts,
@@ -706,6 +1191,15 @@ const GENERATORS = {
   expr_eval: exprEval,
   eq_one_step: eqOneStep,
   eq_two_step: eqTwoStep,
+  frac_div: fracDiv,
+  dec_mult_div: decMultDiv,
+  inequalities,
+  expr_equiv: exprEquiv,
+  proportion,
+  area_volume: areaVolume,
+  circles,
+  coord_plane: coordPlane,
+  probability,
 };
 
 export function makeTask(skill, level, theme, rng) {

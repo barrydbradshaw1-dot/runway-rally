@@ -23,6 +23,12 @@ function niceDay(iso) {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
+// A skill name with its Georgia grade and standard codes underneath.
+function skillRow(g, right) {
+  const tag = g.standard ? `${g.grade ? `Grade ${g.grade} · ` : ''}GA ${g.standard}` : null;
+  return h('div', { class: 'skill-row' }, h('span', {}, g.name, tag ? h('span', { class: 'muted small block', text: tag }) : null), h('span', { class: 'muted', text: right }));
+}
+
 function render(p) {
   const w = p.thisWeek;
   const acc = w.answered ? Math.round((100 * w.correct) / w.answered) : null;
@@ -38,10 +44,10 @@ function render(p) {
     ),
     p.streak > 1 ? h('p', { class: 'center reward', text: `🔥 ${p.streak} days in a row` }) : null,
     p.improved.length
-      ? section('Got better this week', h('div', { class: 'stack' }, p.improved.map((g) => h('div', { class: 'skill-row' }, h('span', { text: g.name }), h('span', { class: 'muted', text: `${g.from}% → ${g.to}%` })))))
+      ? section('Got better this week', h('div', { class: 'stack' }, p.improved.map((g) => skillRow(g, `${g.from}% → ${g.to}%`))))
       : null,
     p.workingOn.length
-      ? section('Working on now', h('div', { class: 'stack' }, p.workingOn.map((g) => h('div', { class: 'skill-row' }, h('span', { text: g.name }), h('span', { class: 'muted', text: `${g.percent}%` })))))
+      ? section('Working on now', h('div', { class: 'stack' }, p.workingOn.map((g) => skillRow(g, `${g.percent}%`))))
       : null,
     p.needsHelp.length
       ? section(
@@ -50,16 +56,21 @@ function render(p) {
             'div',
             { class: 'stack' },
             h('p', { class: 'muted small', text: 'Sitting together for one commission on these, and asking for the thinking out loud, helps more than giving the answer.' }),
-            p.needsHelp.map((g) => h('div', { class: 'skill-row' }, h('span', { text: g.name }), h('span', { class: 'muted', text: `${g.percent}%` }))),
+            p.needsHelp.map((g) => skillRow(g, `${g.percent}%`)),
           ),
         )
       : null,
-    p.strong.length ? section('Strong skills', h('p', { text: p.strong.join(', ') })) : null,
+    p.strong.length
+      ? section(
+          'Strong skills',
+          h('div', { class: 'stack' }, h('p', { text: p.strong.join(', ') }), p.strongStandards?.length ? h('p', { class: 'muted small', text: `Georgia standards: ${p.strongStandards.join(', ')}` }) : null),
+        )
+      : null,
     p.placement === 'not started' || p.placement === 'skipped'
       ? h('p', { class: 'muted center small', text: 'Tip: the skills check on the home screen (under "For grown-ups") helps practice start at the right level.' })
       : null,
     w.answered === 0 ? h('p', { class: 'center', text: 'No practice yet this week. Ten to fifteen minutes most days works best.' }) : null,
-    h('p', { class: 'muted center small', text: 'Percentages show how steady each skill is, not a grade. This page only reads progress and cannot change anything.' }),
+    h('p', { class: 'muted center small', text: 'Percentages show how steady each skill is, not a grade. Codes like 7.PAR.3 are Georgia K-12 Mathematics Standards, so you can match them to what is taught in class. This page only reads progress and cannot change anything.' }),
   );
 }
 

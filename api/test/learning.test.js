@@ -13,6 +13,7 @@ import {
   applyPlacementAnswer,
   finishPlacement,
   progressSummary,
+  placementSummary,
   publicTask,
   PLACEMENT_MAX,
   REVIEW_SLOTS,
@@ -248,6 +249,8 @@ test('placement: a student who knows everything is placed high in few questions'
   assert.ok(asked <= PLACEMENT_MAX);
   assert.equal(s.placement.status, 'done');
   assert.ok(SKILL_IDS.filter((k) => s.mastery[k] >= 0.65).length >= 10);
+  const { summary } = { summary: placementSummary(s) };
+  assert.ok(!summary.startingWith.includes(SKILLS.mult_facts.name), 'does not restart her on what she just showed she knows');
 });
 
 test('placement: a gap at the base marks what depends on it, and the rest starts there', () => {
@@ -360,4 +363,79 @@ test('recovery codes are readable and forgiving to type', () => {
   assert.equal(seen.size, 200);
   assert.equal(normalizeRecoveryCode('rr-abcd-2345'), normalizeRecoveryCode('ABCD2345'));
   assert.equal(normalizeRecoveryCode('nope'), null);
+});
+
+// ---------- Georgia standards and the grade 6 and 7 additions ----------
+
+test('every skill carries Georgia standard codes and the grade Georgia first teaches it', () => {
+  const code = /^[3-8]\.(NR|PAR|GSR|PR|MDR|DSR)\.\d+$/;
+  for (const id of SKILL_IDS) {
+    const s = SKILLS[id];
+    assert.ok(s.codes.length > 0, `${id} has no code`);
+    for (const c of s.codes) assert.match(c, code, `${id}: ${c}`);
+    assert.ok(s.grade >= 3 && s.grade <= 7, `${id} grade ${s.grade}`);
+    assert.equal(Number(s.codes[0][0]), Math.min(...s.codes.map((c) => Number(c[0]))), `${id}: earliest code first`);
+    assert.equal(s.standard, s.codes.join(', '));
+  }
+  assert.deepEqual(SKILLS.expr_eval.codes, ['6.PAR.6'], 'evaluating is 6.PAR.6; 7.PAR.2 is rewriting');
+  assert.deepEqual(SKILLS.expr_equiv.codes, ['7.PAR.2']);
+  assert.deepEqual(SKILLS.eq_two_step.codes, ['7.PAR.3']);
+});
+
+test('the skill map covers the grade 6 and 7 standards found missing in the November check', () => {
+  const covered = new Set(SKILL_IDS.flatMap((id) => SKILLS[id].codes));
+  for (const c of ['6.NR.1', '6.NR.3', '6.NR.4', '6.PAR.6', '6.PAR.7', '6.PAR.8', '6.GSR.5', '7.NR.1', '7.PAR.2', '7.PAR.3', '7.PAR.4', '7.GSR.5', '7.PR.6']) {
+    assert.ok(covered.has(c), `${c} not covered`);
+  }
+});
+
+test('dividing fractions: flip the second fraction, and multiplying straight across gets named', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const t = makeTask('frac_div', 2, 'fabric', mulberry32(seed));
+    const [, a, b, c, d] = /(\d+)\/(\d+) yard of lace\. Each cuff uses (\d+)\/(\d+)/.exec(t.prompt).map(Number);
+    assert.ok(Math.abs(t.answer - (a * d) / (b * c)) < 1e-9);
+    if (Math.abs((a * c) / (b * d) - t.answer) > 1e-9) assert.match(diagnose(t, `${a * c}/${b * d}`), /flip the second/);
+  }
+});
+
+test('inequality word problems ask for the smallest whole number that works', () => {
+  for (let seed = 1; seed <= 80; seed++) {
+    const t = makeTask('inequalities', 3, 'jewelry', mulberry32(seed));
+    const [, a, b, goal] = /Solve (\d+)n − (\d+) > (\d+)/.exec(t.prompt).map(Number);
+    const n = t.answer;
+    assert.ok(a * n - b > goal, 'the answer works');
+    assert.ok(!(a * (n - 1) - b > goal), 'one less does not');
+  }
+});
+
+test('circle problems use 3.14 and accept the exact decimal', () => {
+  const t = makeTask('circles', 3, 'runway', mulberry32(4));
+  const r = Number(/radius of (\d+)/.exec(t.prompt)[1]);
+  assert.ok(Math.abs(t.answer - 3.14 * r * r) < 1e-9);
+  assert.ok(gradeAnswer(t, String(Math.round(3.14 * r * r * 100) / 100)).correct);
+  assert.match(diagnose(t, String((628 * r) / 100)), /circumference/);
+});
+
+test('the new skills sit in the right places on the map', () => {
+  assert.ok(ancestorsOf('frac_div').has('frac_mult'));
+  assert.ok(ancestorsOf('expr_equiv').has('int_mult'));
+  assert.ok(ancestorsOf('inequalities').has('eq_one_step'));
+  assert.ok(ancestorsOf('proportion').has('unit_rate'));
+  assert.ok(ancestorsOf('circles').has('dec_mult_div'));
+  assert.ok(descendantsOf('mult_facts').includes('area_volume'));
+});
+
+test('the family summary carries Georgia codes and grades', () => {
+  const rng = mulberry32(44);
+  const s = fresh();
+  for (const k of SKILL_IDS) s.mastery[k] = 0.75;
+  s.mastery.inequalities = 0.5;
+  s.skillStats.inequalities = { answered: 4, correct: 2 };
+  s.lastPracticed.inequalities = new Date(T0).toISOString();
+  const p = progressSummary(s, { now: T0 });
+  assert.ok(p.strongStandards.includes('7.PAR.2'));
+  const w = p.workingOn.find((x) => x.name === 'Inequalities');
+  assert.equal(w.standard, '6.PAR.7, 7.PAR.3');
+  assert.equal(w.grade, 6);
+  void rng;
 });
