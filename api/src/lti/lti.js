@@ -121,6 +121,7 @@ export function createLtiService({ store, config, fetchImpl = globalThis.fetch, 
     const nrps = c[CLAIM.nrps];
     const rl = c[CLAIM.resourceLink];
     const patch = {
+      kind: 'lti',
       iss: platform.issuer,
       clientId: platform.clientId,
       deploymentId,

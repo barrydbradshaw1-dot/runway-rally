@@ -46,3 +46,15 @@ td.none { background: #eef0f4; color: var(--soft); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .toolbar select { font: inherit; min-height: 44px; border-radius: 12px; border: 2px solid #d8d0f5; padding: 0 10px; background: #fff; }
 .empty { color: var(--soft); padding: 10px 0; }
+
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.row input, .stack input, .stack select, td select { font: inherit; min-height: 44px; border-radius: 12px; border: 2px solid #d8d0f5; padding: 0 10px; background: #fff; }
+table.plain { min-width: 560px; }
+table.plain td:first-child { font-weight: 700; }
+td button, .row button { min-height: 40px; padding: 6px 12px; }
+button.small { min-height: 36px; padding: 4px 10px; font-size: 0.85rem; }
+button.danger { background: #b3123a; color: #fff; border-color: #b3123a; }
+button.danger:disabled { opacity: 0.45; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; }
+.notice { background: #e9fbf2; border: 2px solid #b8ecd3; border-radius: 14px; padding: 12px 14px; display: grid; gap: 4px; }
+.notice .key { word-break: break-all; font-weight: 700; }

@@ -8,7 +8,7 @@ This is the pilot starter for the design in the Runway Rally Game Design Documen
 - Server-side grading and rewards. Answers never reach the client.
 - Adaptive engine v2 (see "How it teaches" below): 37 skills tied to Georgia's grade 3 to 8 math standards, a short skills check that places each student, worked examples, steadier difficulty, mistake-specific feedback, spaced review, and prerequisite repair after repeated misses. The interest model still follows which areas the student picks (with 20% exploration).
 - Sign-in code (`RR-XXXX-XXXX`) so progress follows the student to a new device, and a private read-only family progress page at `/progress/`.
-- **Teacher console** at `/admin/`: sign in with the class code and `ADMIN_TOKEN`, then see a mastery heat map by skill, accuracy, favorite game areas, suggested small groups, who has not started, sorting, auto-refresh, and CSV export. A skill is flagged only after 2+ answers with mastery under 40%, or 3 misses in a row. Skills not yet tried are never flagged.
+- **Teacher console** at `/admin/`: each teacher signs in with their own key, creates classes (each gets a code that can't be guessed), and can delete a student or a whole class. Inside a class they see a mastery heat map by skill, accuracy, favorite game areas, suggested small groups, who has not started, sorting, auto-refresh, and CSV export. A skill is flagged only after 2+ answers with mastery under 40%, or 3 misses in a row. Skills not yet tried are never flagged.
 - Postgres storage (or an in-memory store for development), Docker Compose with automatic HTTPS, backup and restore scripts.
 
 **Not built yet (see the GDD roadmap)**: per-teacher accounts (the console uses one shared admin token for now), OneRoster / SSO, offline play queue, data deletion and retention controls, moderation list for nicknames, real art and audio (the avatar is placeholder SVG), content authoring tools, native store builds.
@@ -24,7 +24,7 @@ npm start           # http://localhost:3000  (memory store, admin token "dev-adm
 
 Run the API tests against a real Postgres: `TEST_DATABASE_URL=postgres://user:pass@host/db node --test test/api.test.js`
 
-Teacher console: open `http://localhost:3000/admin/` and use class code of your choice with token `dev-admin`. Students join at `http://localhost:3000/`.
+Teacher console: open `http://localhost:3000/admin/` and sign in with `dev-admin` (the owner token in development). Create a class there, or add a teacher and sign in with their key. Students join at `http://localhost:3000/` with the class code the console shows.
 
 The same data as JSON:
 ```bash
@@ -107,7 +107,7 @@ Check it: `curl https://YOUR-DOMAIN/lti/jwks.json` should return one public key,
 | Checks | RS256 signature against the platform keyset, issuer, audience, expiry, nonce, one-time state, registered deployment, message type, version and role. Anything else is refused with a plain message. |
 | Class | One class per Brightspace course, with code `LTI-XXXXXXXX` derived from issuer, deployment and course. |
 | Students | A fresh session token is handed to the browser in the URL fragment, which is never sent to a server or logged. Progress follows the Brightspace user across launches and devices. |
-| Teachers | A signed 8-hour session scoped to that one course, so an instructor can never see another course. The shared `ADMIN_TOKEN` still works for you as the developer. |
+| Teachers | A signed 8-hour session scoped to that one course, so an instructor can never see another course. `ADMIN_TOKEN` is the server owner's and sees every class. |
 | Roster | The console shows `X of Y enrolled students have opened Runway Rally` from the Brightspace roster (counts only, refreshed every 5 minutes). |
 
 Not supported yet: Deep Linking (add the tool as a link rather than choosing content), and per-assignment grade columns beyond one per link.
@@ -183,11 +183,48 @@ scripts/              droplet setup, deploy, backup, restore test
 - New fashion item or card: add to `ITEMS` / `CARDS` in `logic.js` and draw it in `avatar()` in `web/app.js`.
 - A generator returns `answer` (a number), `answerText` (how it is written, such as `3/4` or `-2`), three hints whose last one states `answerText`, and `mistakes` (likely wrong answers with a short explanation). Set `requireFraction` when the answer must be a fraction. The test suite checks every skill, level and theme across hundreds of seeds.
 
+## Teachers, classes and deleting data
+
+- **Owner:** whoever holds `ADMIN_TOKEN`. Signs in to `/admin/` with it, adds teachers (each gets a key shown once), issues a teacher a new key, removes a teacher, and sees every class.
+- **Teacher:** signs in with their own key, creates classes, and sees only their own. Removing a teacher ends their access; their classes stay and the owner can hand them to someone else.
+- **Deleting a student:** the Delete button on that student's row removes the student, their answers, tasks, sign-in and recovery codes, and family link.
+- **Deleting a class:** type the class code under Class data and press Delete. Every student in it goes with it. This is how to meet a school's deletion request (Georgia's Student Data Privacy Act asks for 45 days).
+- **Audit log:** each deletion, retention run and teacher change is logged with counts only, never nicknames. The owner can read it at `GET /api/admin/audit`.
+
+**Upgrading an existing server.** Classes made before this version were never registered, so new students can't join them. Their current students keep playing. Sign in as the owner: those codes show as "Not registered". Press **Let students join** to keep a code, or create a new class and share its new code.
+
+| Method and path | Who | Purpose |
+| --- | --- | --- |
+| `GET /api/admin/me` | any | who is signed in, and the retention settings |
+| `GET /api/admin/classes` | any | classes this login can see, with student counts |
+| `POST /api/admin/classes` `{name, endsOn?}` | owner, teacher | create a class with a new code; the owner may also pass `code` and `teacherId` |
+| `PATCH /api/admin/class/:code` `{name?, endsOn?}` | owner, teacher | rename or set the last day; the owner may set `teacherId` |
+| `DELETE /api/admin/class/:code/student/:id` | owner, teacher, Brightspace | delete one student |
+| `DELETE /api/admin/class/:code` `{confirm: code}` | owner, teacher, Brightspace | delete the class and all its students |
+| `GET`, `POST /api/admin/teachers` | owner | list or add teachers |
+| `POST /api/admin/teachers/:id/key`, `DELETE /api/admin/teachers/:id` | owner | new key, or remove |
+| `GET /api/admin/audit` | owner | the last 200 audit entries |
+
+## Data retention
+
+The server deletes old data on its own, once when it starts and then every 24 hours. This is the written schedule:
+
+| Data | Kept for | Setting (days, `0` turns it off) |
+| --- | --- | --- |
+| Answer history and finished problems | 365 days. The problem a student is working on is kept. | `RETENTION_ANSWER_DAYS=365` |
+| A student who stops playing (profile, mastery, codes) | 730 days after they last played | `RETENTION_INACTIVE_DAYS=730` |
+| A class with a last day set, and all its students | 30 days after that day | `RETENTION_CLASS_END_DAYS=30` |
+| Audit log | 1,095 days | `RETENTION_AUDIT_DAYS=1095` |
+| Daily totals and progress snapshots | 35 days (already trimmed as students play) | none |
+
+When a school's agreement ends, set the class's last day (or delete the class) so its data goes within 30 days. Nightly backups keep 14 copies, so deleted data can stay in a backup for up to 14 more days. Each run logs its counts to the server log and the audit log.
+
 ## Safety notes for the pilot
 
 - Only a class code and nickname are collected (or, via Brightspace, an opaque user hash and an auto nickname). No names, emails, locations or free chat unless you opt in with `LTI_STORE_NAMES=1`.
 - `cleanNickname` has an empty blocklist. **Add a real moderation list before students use it.**
-- Brightspace instructors get course-scoped signed sessions. The shared `ADMIN_TOKEN` (kept in `sessionStorage`, rate limited) is for the developer and for non-Brightspace classes only.
+- Each teacher has their own key, stored only as a SHA-256 hash and shown once. A teacher sees only the classes they created or were given. Brightspace instructors get course-scoped signed sessions. `ADMIN_TOKEN` belongs to the server owner alone; don't share it with teachers.
+- Students can join only a class created in the console. Codes are 8 characters from a 31-letter alphabet (about 850 billion possibilities), and joins are limited to 20 tries a minute per IP.
 - Student tokens are stored hashed. Student data is isolated by class code in queries, but there is no per-school tenant table yet.
 - Have counsel review the privacy posture (COPPA, FERPA, district agreements) before a school pilot.
 - Known limit: one request at a time per student is enforced in-process, so run a single API container until you move that lock to the database.
