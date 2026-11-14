@@ -72,17 +72,20 @@ test('full play-through over HTTP; answers never leak to the client', async () =
     let last;
     for (let n = 0; n < 5; n++) {
       // wrong twice reveals the correct answer, which lets this test continue without peeking at the store
-      const m1 = await call('/api/answer', { method: 'POST', token, body: { taskId: task.id, answer: '-7' } });
+      const m1 = await call('/api/answer', { method: 'POST', token, body: { taskId: task.id, answer: '99999' } });
       assert.equal(m1.json.retry, true);
-      const m2 = await call('/api/answer', { method: 'POST', token, body: { taskId: task.id, answer: '-7' } });
+      const m2 = await call('/api/answer', { method: 'POST', token, body: { taskId: task.id, answer: '99999' } });
       assert.equal(m2.json.correct, false);
-      assert.ok(Number.isFinite(m2.json.revealedAnswer));
+      assert.equal(typeof m2.json.revealedAnswer, 'string');
+      assert.ok(m2.json.steps.length > 0);
       assert.ok(m2.json.thread >= 1);
       last = m2.json;
       if (m2.json.next) task = m2.json.next;
     }
     assert.equal(last.commissionComplete, true);
-    assert.ok(last.pack.card.id);
+    assert.equal(last.pack, null, 'all wrong: no pack, so packs mean learning');
+    assert.ok(last.effortThread > 0, 'effort still earns thread');
+    assert.ok(last.packHint);
     assert.equal(last.student.commission, null);
     assert.equal(last.student.stats.answered, 5);
 
@@ -165,6 +168,99 @@ test('admin console page is served', async () => {
     const page = await call('/admin/');
     assert.equal(page.status, 200);
     assert.ok(page.text.includes('Teacher console'));
+  } finally {
+    server.close();
+  }
+});
+
+test('a recovery code signs her back in on another device, and a new code replaces the old one', async () => {
+  const { server, call } = await boot();
+  try {
+    const s = await call('/api/session', { method: 'POST', body: { classCode: 'HOME', nickname: 'Ava' } });
+    assert.match(s.json.recoveryCode, /^RR-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+    await call('/api/commission/start', { method: 'POST', token: s.json.token, body: {} });
+
+    const bad = await call('/api/session/recover', { method: 'POST', body: { code: 'RR-2222-2222' } });
+    assert.equal(bad.status, 404);
+    assert.equal((await call('/api/session/recover', { method: 'POST', body: { code: 'x' } })).status, 400);
+
+    const typed = s.json.recoveryCode.toLowerCase().replace(/-/g, ' ');
+    const back = await call('/api/session/recover', { method: 'POST', body: { code: typed } });
+    assert.equal(back.status, 200);
+    assert.equal(back.json.student.nickname, 'Ava');
+    assert.ok(back.json.student.commission, 'same progress, same open commission');
+    assert.ok(!back.text.includes('recoveryCode'));
+
+    const fresh = await call('/api/recovery-code', { method: 'POST', token: back.json.token });
+    assert.notEqual(fresh.json.recoveryCode, s.json.recoveryCode);
+    assert.equal((await call('/api/session/recover', { method: 'POST', body: { code: s.json.recoveryCode } })).status, 404);
+    assert.equal((await call('/api/session/recover', { method: 'POST', body: { code: fresh.json.recoveryCode } })).status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('the family progress link is read-only, private, and can be replaced', async () => {
+  const { server, call } = await boot();
+  try {
+    const s = await call('/api/session', { method: 'POST', body: { classCode: 'HOME', nickname: 'Ava' } });
+    const token = s.json.token;
+    const link = await call('/api/progress-link', { method: 'POST', token });
+    assert.match(link.json.path, /^\/progress\/#k=[A-Za-z0-9_-]{32,64}$/);
+    const key = link.json.path.split('#k=')[1];
+
+    assert.equal((await call('/api/progress')).status, 401);
+    const p = await call('/api/progress', { headers: { 'x-progress-key': key, 'x-tz-offset': '300' } });
+    assert.equal(p.status, 200);
+    assert.equal(p.json.nickname, 'Ava');
+    assert.equal(p.json.thisWeek.answered, 0);
+    assert.ok(!p.text.includes('token') && !p.text.includes('HOME'));
+    // the progress key is not a sign-in
+    assert.equal((await call('/api/state', { token: key })).status, 401);
+    assert.notEqual((await call('/api/progress', { method: 'POST', headers: { 'x-progress-key': key } })).status, 200, 'cannot write through it');
+
+    const again = await call('/api/progress-link', { method: 'POST', token });
+    assert.equal((await call('/api/progress', { headers: { 'x-progress-key': key } })).status, 404, 'old link stops working');
+    const key2 = again.json.path.split('#k=')[1];
+    assert.equal((await call('/api/progress', { headers: { 'x-progress-key': key2 } })).status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('the skills check over HTTP: skip through, see a summary, then practice starts at her level', async () => {
+  const { server, call } = await boot();
+  try {
+    const s = await call('/api/session', { method: 'POST', body: { classCode: 'HOME', nickname: 'Ava' } });
+    const token = s.json.token;
+    const start = await call('/api/placement/start', { method: 'POST', token, body: {} });
+    assert.equal(start.status, 200);
+    let task = start.json.task;
+    assert.equal(task.placement, true);
+    assert.ok(!start.text.includes('"answer"') && !start.text.includes('answerText'));
+    assert.equal((await call('/api/hint', { method: 'POST', token, body: { taskId: task.id } })).status, 409);
+    assert.equal((await call('/api/answer', { method: 'POST', token, body: { taskId: task.id, answer: '1' } })).status, 409);
+
+    const resumed = await call('/api/placement/start', { method: 'POST', token, body: {} });
+    assert.equal(resumed.json.task.id, task.id);
+
+    let r;
+    let n = 0;
+    do {
+      r = await call('/api/placement/answer', { method: 'POST', token, body: { taskId: task.id, skip: true } });
+      assert.equal(r.status, 200);
+      task = r.json.next;
+      n++;
+    } while (task && n < 20);
+    assert.ok(r.json.summary, 'finished with a summary');
+    assert.ok(r.json.summary.startingWith.length > 0);
+    assert.equal(r.json.student.placement.status, 'done');
+    assert.ok(n <= 6, `skipping everything should end quickly, took ${n}`);
+
+    const c = await call('/api/commission/start', { method: 'POST', token, body: {} });
+    assert.equal(c.status, 200);
+    assert.ok(c.json.task.example, 'first practice problem comes with a worked example');
+    assert.ok(['mult_facts', 'decimals', 'int_add'].includes(c.json.task.skill), `starts at a foundation, got ${c.json.task.skill}`);
   } finally {
     server.close();
   }

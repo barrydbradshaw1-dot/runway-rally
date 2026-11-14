@@ -10,8 +10,17 @@ export class MemoryStore {
     this.tasks = new Map();
     this.events = [];
     this.classes = new Map();
+    this.keys = new Map(); // `${kind}:${hash}` -> studentId (recovery codes, family progress links)
   }
   async init() {}
+  async setKey(studentId, kind, keyHash) {
+    for (const [k, id] of this.keys) if (id === studentId && k.startsWith(kind + ':')) this.keys.delete(k);
+    this.keys.set(`${kind}:${keyHash}`, studentId);
+  }
+  async getStudentByKey(kind, keyHash) {
+    const id = this.keys.get(`${kind}:${keyHash}`);
+    return id && this.students.has(id) ? structuredClone(this.students.get(id)) : null;
+  }
   async addToken(studentId, tokenHash) {
     this.byToken.set(tokenHash, studentId);
   }
@@ -101,6 +110,24 @@ export class PgStore {
   }
   async addToken(studentId, tokenHash) {
     await this.pool.query('INSERT INTO student_tokens (token_hash, student_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [tokenHash, studentId]);
+  }
+  async setKey(studentId, kind, keyHash) {
+    const c = await this.pool.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query('DELETE FROM student_keys WHERE student_id = $1 AND kind = $2', [studentId, kind]);
+      await c.query('INSERT INTO student_keys (key_hash, student_id, kind) VALUES ($1,$2,$3)', [keyHash, studentId, kind]);
+      await c.query('COMMIT');
+    } catch (err) {
+      await c.query('ROLLBACK');
+      throw err;
+    } finally {
+      c.release();
+    }
+  }
+  async getStudentByKey(kind, keyHash) {
+    const r = await this.pool.query('SELECT s.data FROM student_keys k JOIN students s ON s.id = k.student_id WHERE k.key_hash = $1 AND k.kind = $2', [keyHash, kind]);
+    return r.rows[0]?.data ?? null;
   }
   async getStudentByLtiKey(key) {
     const r = await this.pool.query("SELECT data FROM students WHERE data->>'ltiKey' = $1 OR data->'lti'->>'ltiKey' = $1 LIMIT 1", [key]);

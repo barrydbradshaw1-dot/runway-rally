@@ -1,6 +1,6 @@
 // Zero-framework HTTP server: JSON API plus static files for the web client.
 import http from 'node:http';
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,12 @@ import {
   giveHint,
   applyAnswer,
   classSummary,
+  normalizeStudent,
+  startPlacement,
+  placementTask,
+  applyPlacementAnswer,
+  finishPlacement,
+  progressSummary,
 } from './logic.js';
 
 const MIME = {
@@ -41,7 +47,23 @@ const CATALOG = {
   items: ITEMS,
   cards: CARDS,
   skills: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].name])),
+  skillInfo: Object.fromEntries(SKILL_IDS.map((id) => [id, { name: SKILLS[id].name, prereq: SKILLS[id].prereq, standard: SKILLS[id].standard }])),
 };
+
+// Recovery codes: 8 characters from an alphabet without look-alikes (0/O, 1/I/L), shown as RR-XXXX-XXXX.
+const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+export function newRecoveryCode() {
+  let c = '';
+  for (let i = 0; i < 8; i++) c += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return `RR-${c.slice(0, 4)}-${c.slice(4)}`;
+}
+export function normalizeRecoveryCode(raw) {
+  if (typeof raw !== 'string' || raw.length > 40) return null;
+  let c = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (c.length === 10 && c.startsWith('RR')) c = c.slice(2);
+  c = c.replace(/O/g, '0').replace(/[IL]/g, '1');
+  return /^[2-9A-HJKMNP-Z]{8}$/.test(c) ? c : null;
+}
 
 // Placeholder nickname filter. Replace with a real moderation list before any pilot with students.
 const BLOCKLIST = [];
@@ -75,6 +97,17 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
   const ltiConfig = loadLtiConfig(env);
   const lti = createLtiService({ store, config: ltiConfig, fetchImpl, now });
   const pub = (s) => ({ ...publicStudent(s), viaLti: Boolean(s.lti) });
+  const clock = () => (now ? now() : Date.now());
+  // The browser sends its time zone offset (minutes behind UTC) so days and streaks follow her clock.
+  const tzOf = (req) => {
+    const n = Number(req.headers['x-tz-offset']);
+    return Number.isInteger(n) && Math.abs(n) <= 840 ? n : 0;
+  };
+  async function issueRecoveryCode(student) {
+    const code = newRecoveryCode();
+    await store.setKey(student.id, 'recovery', sha256('recovery:' + normalizeRecoveryCode(code)));
+    return code;
+  }
 
   // --- tiny in-memory rate limiter (per client IP) ---
   const hits = new Map();
@@ -183,8 +216,34 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       const token = randomBytes(24).toString('base64url');
       const student = newStudent({ id: randomUUID(), classCode, nickname });
       await store.createStudent(student, sha256(token));
+      const recoveryCode = await issueRecoveryCode(student);
       await store.addEvent(student.id, 'session_start');
-      return send(res, 201, { token, student: pub(student) });
+      return send(res, 201, { token, recoveryCode, student: pub(student) });
+    }
+
+    // Sign back in on a new device (or after clearing the browser) with the recovery code.
+    if (method === 'POST' && path === '/api/session/recover') {
+      if (limited('recover:' + clientIp(req), 10)) throw new HttpError(429, 'too many tries, wait a minute');
+      const body = await readJson(req);
+      const code = normalizeRecoveryCode(body.code);
+      if (!code) throw new HttpError(400, 'that code does not look right. It looks like RR-ABCD-2345');
+      const found = await store.getStudentByKey('recovery', sha256('recovery:' + code));
+      if (!found) throw new HttpError(404, 'that code did not match anyone. Check it and try again');
+      const student = normalizeStudent(found);
+      const token = randomBytes(24).toString('base64url');
+      await store.addToken(student.id, sha256(token));
+      await store.addEvent(student.id, 'session_recover');
+      return send(res, 200, { token, student: pub(student) });
+    }
+
+    // Family progress page: read-only, opened with a private link the student's family keeps.
+    if (method === 'GET' && path === '/api/progress') {
+      if (limited('progress:' + clientIp(req), 60)) throw new HttpError(429, 'too many tries, wait a minute');
+      const key = String(req.headers['x-progress-key'] || '');
+      if (!/^[A-Za-z0-9_-]{32,64}$/.test(key)) throw new HttpError(401, 'this progress link is not valid');
+      const found = await store.getStudentByKey('progress', sha256('progress:' + key));
+      if (!found) throw new HttpError(404, 'this progress link was replaced or is not valid. Ask for a new one');
+      return send(res, 200, progressSummary(found, { now: clock(), tz: tzOf(req) }));
     }
 
     if (method === 'GET' && path.startsWith('/api/admin/class/')) {
@@ -210,7 +269,8 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     // everything below needs a signed-in student
     const me = await auth(req);
     return withLock(me.id, async () => {
-      const student = await store.getStudentByTokenHash(sha256(/Bearer (\S+)/.exec(req.headers.authorization)[1]));
+      const student = normalizeStudent(await store.getStudentByTokenHash(sha256(/Bearer (\S+)/.exec(req.headers.authorization)[1])));
+      const tz = tzOf(req);
 
       if (method === 'GET' && path === '/api/state') {
         return send(res, 200, { student: pub(student), catalog: CATALOG });
@@ -232,8 +292,8 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           return send(res, 200, { resumed: true, task: publicTask(existing, student.commission), student: pub(student) });
         }
         if (body.theme !== undefined && !THEMES.includes(body.theme)) throw new HttpError(400, 'unknown theme');
-        const { story, repair } = startCommission(student, { theme: body.theme, rng });
-        const task = nextTask(student, rng);
+        const { story, repair } = startCommission(student, { theme: body.theme, rng, now: clock() });
+        const task = nextTask(student, rng, { now: clock() });
         await store.saveTask(task);
         await store.saveStudent(student);
         await store.addEvent(student.id, 'commission_start', { skill: student.commission.skill, theme: student.commission.theme, repair });
@@ -255,12 +315,13 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         const body = await readJson(req);
         const task = await store.getTask(String(body.taskId));
         if (!task || task.studentId !== student.id) throw new HttpError(404, 'task not found');
-        const result = applyAnswer(student, task, body.answer, rng);
+        if (task.placement) throw new HttpError(409, 'answer skills check questions with /api/placement/answer');
+        const result = applyAnswer(student, task, body.answer, rng, { now: clock(), tz });
         if (result.error) throw new HttpError(409, result.error);
         await store.saveTask(task);
         let next = null;
         if (!result.retry && !result.commissionComplete) {
-          const t = nextTask(student, rng);
+          const t = nextTask(student, rng, { now: clock() });
           await store.saveTask(t);
           next = publicTask(t, student.commission);
         }
@@ -272,8 +333,62 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           correct: result.correct,
           retry: result.retry,
           hintLevel: task.hintLevel,
+          review: task.review,
         });
         return send(res, 200, { ...result, next, student: pub(student) });
+      }
+
+      // ----- placement check -----
+      if (method === 'POST' && path === '/api/placement/start') {
+        const body = await readJson(req);
+        const p = student.placement;
+        if (p?.status === 'active' && p.taskId && !body.restart) {
+          const t = await store.getTask(p.taskId);
+          if (t && !t.answered) return send(res, 200, { resumed: true, task: publicTask(t), student: pub(student) });
+        }
+        startPlacement(student, { now: clock() });
+        const task = placementTask(student, rng);
+        await store.saveTask(task);
+        await store.saveStudent(student);
+        await store.addEvent(student.id, 'placement_start');
+        return send(res, 200, { task: publicTask(task), student: pub(student) });
+      }
+
+      if (method === 'POST' && path === '/api/placement/answer') {
+        const body = await readJson(req);
+        const task = await store.getTask(String(body.taskId));
+        if (!task || task.studentId !== student.id || !task.placement) throw new HttpError(404, 'question not found');
+        const r = applyPlacementAnswer(student, task, body.answer, { skip: body.skip === true });
+        if (r.error) throw new HttpError(409, r.error);
+        await store.saveTask(task);
+        const next = placementTask(student, rng);
+        let summary = null;
+        if (next) await store.saveTask(next);
+        else summary = finishPlacement(student, { now: clock() });
+        await store.saveStudent(student);
+        await store.addEvent(student.id, summary ? 'placement_done' : 'placement_answer', { skill: task.skill, skipped: body.skip === true });
+        return send(res, 200, { next: next ? publicTask(next) : null, summary, student: pub(student) });
+      }
+
+      if (method === 'POST' && path === '/api/placement/skip') {
+        if (!student.placement || student.placement.status !== 'done') student.placement = { status: 'skipped', results: {}, misses: {}, asked: 0, taskId: null };
+        await store.saveStudent(student);
+        return send(res, 200, { student: pub(student) });
+      }
+
+      // ----- recovery code and family link (each new one replaces the old one) -----
+      if (method === 'POST' && path === '/api/recovery-code') {
+        if (student.lti) throw new HttpError(400, 'you sign in through your school, so you do not need a code');
+        const code = await issueRecoveryCode(student);
+        await store.addEvent(student.id, 'recovery_code_new');
+        return send(res, 200, { recoveryCode: code });
+      }
+
+      if (method === 'POST' && path === '/api/progress-link') {
+        const key = randomBytes(24).toString('base64url');
+        await store.setKey(student.id, 'progress', sha256('progress:' + key));
+        await store.addEvent(student.id, 'progress_link_new');
+        return send(res, 200, { path: `/progress/#k=${key}` });
       }
 
       throw new HttpError(404, 'not found');

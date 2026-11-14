@@ -46,3 +46,13 @@ CREATE TABLE IF NOT EXISTS classes (
 );
 
 CREATE INDEX IF NOT EXISTS students_lti_idx ON students ((data->'lti'->>'ltiKey'));
+
+-- Recovery codes (sign back in on a new device) and family progress links. Only hashes are stored,
+-- and each student has at most one of each kind: making a new one replaces the old one.
+CREATE TABLE IF NOT EXISTS student_keys (
+  key_hash    text PRIMARY KEY,
+  student_id  uuid NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+  kind        text NOT NULL CHECK (kind IN ('recovery', 'progress')),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS student_keys_student_idx ON student_keys (student_id, kind);
