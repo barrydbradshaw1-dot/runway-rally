@@ -56,3 +56,26 @@ CREATE TABLE IF NOT EXISTS student_keys (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS student_keys_student_idx ON student_keys (student_id, kind);
+
+-- Teacher logins. Each teacher has their own key (only its hash is stored) and sees only their own
+-- classes. ADMIN_TOKEN stays with the owner of the server.
+CREATE TABLE IF NOT EXISTS teachers (
+  id          uuid PRIMARY KEY,
+  name        text NOT NULL,
+  key_hash    text NOT NULL UNIQUE,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS classes_teacher_idx ON classes ((data->>'teacherId'));
+
+-- What was deleted, when and by whom (counts only, never student data). Kept as proof that a
+-- school's deletion request was carried out.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          bigserial PRIMARY KEY,
+  at          timestamptz NOT NULL DEFAULT now(),
+  actor       text NOT NULL,
+  action      text NOT NULL,
+  detail      jsonb NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS events_at_idx ON events (at);
+CREATE INDEX IF NOT EXISTS tasks_created_idx ON tasks (created_at);
+CREATE INDEX IF NOT EXISTS students_updated_idx ON students (updated_at);

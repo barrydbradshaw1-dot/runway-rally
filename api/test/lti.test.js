@@ -224,7 +224,7 @@ test('instructor launch gives a teacher session scoped to that course only', () 
     const session = tokenFrom(t.res);
 
     const me = await api('/api/admin/me', { headers: { 'x-lti-session': session } });
-    assert.equal(me.json.kind, 'teacher');
+    assert.equal(me.json.kind, 'lti');
     assert.equal(me.json.classCode, code);
     assert.equal(me.json.title, 'Algebra Support');
 

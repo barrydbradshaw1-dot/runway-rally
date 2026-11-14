@@ -65,6 +65,38 @@ export function normalizeRecoveryCode(raw) {
   return /^[2-9A-HJKMNP-Z]{8}$/.test(c) ? c : null;
 }
 
+// Class codes made by the server: 8 characters from the same alphabet, shown as ABCD-2345
+// (about 850 billion possibilities, and joining is rate limited), so a code cannot be guessed.
+export function newClassCode() {
+  let c = '';
+  for (let i = 0; i < 8; i++) c += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return `${c.slice(0, 4)}-${c.slice(4)}`;
+}
+export function newTeacherKey() {
+  return 'rt_' + randomBytes(24).toString('base64url');
+}
+const DAY_MS = 86_400_000;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+const cleanDay = (raw) => (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw) && !Number.isNaN(Date.parse(raw)) ? raw : null);
+const cleanName = (raw, max = 60) => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, max) : '');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// How long data is kept. Defaults match the written schedule in the README ("Data retention").
+export function retentionConfig(env = process.env) {
+  const days = (name, def) => {
+    const v = env[name];
+    if (v === undefined || v === '') return def;
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : def;
+  };
+  return {
+    answerDays: days('RETENTION_ANSWER_DAYS', 365),
+    inactiveDays: days('RETENTION_INACTIVE_DAYS', 730),
+    classEndDays: days('RETENTION_CLASS_END_DAYS', 30),
+    auditDays: days('RETENTION_AUDIT_DAYS', 1095),
+  };
+}
+
 // Placeholder nickname filter. Replace with a real moderation list before any pilot with students.
 const BLOCKLIST = [];
 export function cleanNickname(raw) {
@@ -103,6 +135,20 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     const n = Number(req.headers['x-tz-offset']);
     return Number.isInteger(n) && Math.abs(n) <= 840 ? n : 0;
   };
+  const retention = retentionConfig(env);
+  // Deletes what the schedule says is too old. 0 days turns a rule off.
+  async function runRetention(at = clock()) {
+    const before = (d) => (d > 0 ? new Date(at - d * DAY_MS) : null);
+    const result = await store.applyRetention({
+      answersBefore: before(retention.answerDays),
+      inactiveBefore: before(retention.inactiveDays),
+      classesEndedBefore: retention.classEndDays >= 0 ? isoDay(at - retention.classEndDays * DAY_MS) : null,
+      auditBefore: before(retention.auditDays),
+    });
+    if (Object.values(result).some((n) => n > 0)) await store.addAudit('retention', 'retention', result);
+    return result;
+  }
+
   async function issueRecoveryCode(student) {
     const code = newRecoveryCode();
     await store.setKey(student.id, 'recovery', sha256('recovery:' + normalizeRecoveryCode(code)));
@@ -181,20 +227,40 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return student;
   }
 
-  // Returns { all: true } for the shared admin token, or { classCode, title } for a Brightspace instructor session.
-  function requireTeacher(req) {
+  // Who is using the teacher console:
+  //   { role: 'owner' }                       ADMIN_TOKEN: the server owner, sees every class
+  //   { role: 'teacher', teacherId, name }    a teacher's own key: only the classes they created
+  //   { role: 'lti', classCode, title }       a Brightspace instructor: only that course
+  async function requireTeacher(req) {
     const sess = req.headers['x-lti-session'];
     if (sess) {
       const p = ltiConfig.verifySession(String(sess));
       if (!p || p.kind !== 'teacher' || !p.classCode) throw new HttpError(401, 'your session expired, open Runway Rally from your course again');
-      return { all: false, classCode: p.classCode, title: p.title };
+      return { role: 'lti', classCode: p.classCode, title: p.title };
+    }
+    const raw = String(req.headers['x-admin-token'] || '');
+    if (/^rt_[A-Za-z0-9_-]{32}$/.test(raw)) {
+      const t = await store.getTeacherByKeyHash(sha256('teacher:' + raw));
+      if (!t) throw new HttpError(403, 'forbidden');
+      return { role: 'teacher', teacherId: t.id, name: t.name };
     }
     if (!adminToken) throw new HttpError(503, 'admin access is not configured');
-    const given = Buffer.from(String(req.headers['x-admin-token'] || ''));
+    const given = Buffer.from(raw);
     const want = Buffer.from(adminToken);
     if (given.length !== want.length || !timingSafeEqual(given, want)) throw new HttpError(403, 'forbidden');
-    return { all: true };
+    return { role: 'owner' };
   }
+  function requireOwner(who) {
+    if (who.role !== 'owner') throw new HttpError(403, 'only the server owner can do that');
+  }
+  async function canManage(who, code) {
+    if (who.role === 'owner') return true;
+    if (who.role === 'lti') return who.classCode === code;
+    const c = await store.getClass(code);
+    return Boolean(c && c.teacherId === who.teacherId);
+  }
+  const actorOf = (who) => (who.role === 'teacher' ? `teacher:${who.teacherId}` : who.role === 'lti' ? `lti:${who.classCode}` : 'owner');
+  const classOut = (c) => ({ code: c.code, name: c.name || c.contextTitle || null, kind: c.kind || (c.code.startsWith('LTI-') ? 'lti' : 'manual'), teacherId: c.teacherId || null, endsOn: c.endsOn || null, createdAt: c.createdAt || null, students: c.students ?? null });
 
   async function taskFor(student) {
     if (!student.commission || !student.currentTaskId) return null;
@@ -213,6 +279,11 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       const nickname = cleanNickname(body.nickname);
       if (!classCode) throw new HttpError(400, 'enter the class code from your teacher');
       if (!nickname) throw new HttpError(400, 'pick a nickname (2 to 20 letters or numbers)');
+      // only classes a teacher created can be joined, and wrong guesses are limited
+      if (limited('join:' + clientIp(req), 20)) throw new HttpError(429, 'too many tries, wait a minute');
+      const cls = await store.getClass(classCode);
+      if (!cls || cls.kind !== 'manual') throw new HttpError(404, 'that class code did not match a class. Check it with your teacher');
+      if (cls.endsOn && cls.endsOn < isoDay(clock())) throw new HttpError(403, 'that class has ended');
       const token = randomBytes(24).toString('base64url');
       const student = newStudent({ id: randomUUID(), classCode, nickname });
       await store.createStudent(student, sha256(token));
@@ -249,21 +320,157 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     if (method === 'GET' && path.startsWith('/api/admin/class/')) {
       // tighter limit than the general one so the admin token cannot be guessed quickly
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
-      const who = requireTeacher(req);
-      const code = cleanClassCode(decodeURIComponent(path.slice('/api/admin/class/'.length)));
+      const who = await requireTeacher(req);
+      const rest = path.slice('/api/admin/class/'.length).split('/');
+      const code = cleanClassCode(decodeURIComponent(rest[0]));
       if (!code) throw new HttpError(400, 'bad class code');
-      if (!who.all && who.classCode !== code) throw new HttpError(403, 'forbidden');
+      if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+      if (rest.length !== 1) throw new HttpError(404, 'not found');
       const list = await store.listClass(code);
       const cls = await store.getClass(code);
-      const out = { classCode: code, title: cls?.contextTitle || null, skills: CATALOG.skills, skillInfo: CATALOG.skillInfo, students: classSummary(list) };
+      const out = {
+        classCode: code,
+        title: cls?.contextTitle || cls?.name || null,
+        endsOn: cls?.endsOn || null,
+        kind: cls ? classOut(cls).kind : 'unregistered',
+        skills: CATALOG.skills,
+        skillInfo: CATALOG.skillInfo,
+        students: classSummary(list),
+      };
       if (cls?.nrpsUrl) out.roster = await lti.rosterSummary(code, list);
       return send(res, 200, out);
     }
 
+    // ----- deleting student data (a school's deletion request; Georgia asks for it within 45 days) -----
+    if (method === 'DELETE' && path.startsWith('/api/admin/class/')) {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      const who = await requireTeacher(req);
+      const rest = path.slice('/api/admin/class/'.length).split('/');
+      const code = cleanClassCode(decodeURIComponent(rest[0]));
+      if (!code) throw new HttpError(400, 'bad class code');
+      if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+      if (rest.length === 3 && rest[1] === 'student' && UUID.test(rest[2])) {
+        const n = await store.deleteStudent(code, rest[2]);
+        if (!n) throw new HttpError(404, 'that student is not in this class');
+        await store.addAudit(actorOf(who), 'delete_student', { classCode: code, students: 1 });
+        return send(res, 200, { deleted: 1 });
+      }
+      if (rest.length !== 1) throw new HttpError(404, 'not found');
+      const body = await readJson(req);
+      if (cleanClassCode(body.confirm) !== code) throw new HttpError(400, 'type the class code to confirm');
+      const n = await store.deleteClass(code);
+      await store.addAudit(actorOf(who), 'delete_class', { classCode: code, students: n });
+      return send(res, 200, { deleted: n });
+    }
+
+    if (method === 'PATCH' && path.startsWith('/api/admin/class/')) {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      const who = await requireTeacher(req);
+      const code = cleanClassCode(decodeURIComponent(path.slice('/api/admin/class/'.length)));
+      if (!code) throw new HttpError(400, 'bad class code');
+      if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+      const cls = await store.getClass(code);
+      if (!cls) throw new HttpError(404, 'class not found');
+      const body = await readJson(req);
+      const patch = {};
+      if (body.name !== undefined) patch.name = cleanName(body.name) || cls.name;
+      if (body.endsOn !== undefined) {
+        if (body.endsOn !== null && !cleanDay(body.endsOn)) throw new HttpError(400, 'the end date should look like 2027-06-01');
+        patch.endsOn = body.endsOn;
+      }
+      if (who.role === 'owner' && body.teacherId !== undefined) patch.teacherId = body.teacherId && UUID.test(body.teacherId) ? body.teacherId : null;
+      return send(res, 200, { class: classOut(await store.upsertClass(code, patch)) });
+    }
+
     if (method === 'GET' && path === '/api/admin/me') {
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
-      const who = requireTeacher(req);
-      return send(res, 200, who.all ? { kind: 'admin' } : { kind: 'teacher', classCode: who.classCode, title: who.title });
+      const who = await requireTeacher(req);
+      if (who.role === 'owner') return send(res, 200, { kind: 'owner', retention });
+      if (who.role === 'teacher') return send(res, 200, { kind: 'teacher', name: who.name, retention });
+      return send(res, 200, { kind: 'lti', classCode: who.classCode, title: who.title, retention });
+    }
+
+    // ----- classes: a teacher creates a class and gets a code that cannot be guessed -----
+    if (path === '/api/admin/classes') {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      const who = await requireTeacher(req);
+      if (method === 'GET') {
+        if (who.role === 'lti') {
+          const c = await store.getClass(who.classCode);
+          return send(res, 200, { classes: c ? [classOut({ ...c, students: (await store.listClass(c.code)).length })] : [] });
+        }
+        const list = await store.listClasses(who.role === 'owner' ? { includeUnregistered: true } : { teacherId: who.teacherId });
+        return send(res, 200, { classes: list.map(classOut) });
+      }
+      if (method === 'POST') {
+        if (who.role === 'lti') throw new HttpError(403, 'Brightspace courses get their class automatically');
+        const body = await readJson(req);
+        const name = cleanName(body.name);
+        if (!name) throw new HttpError(400, 'give the class a name, like Period 3 Math');
+        const endsOn = body.endsOn ? cleanDay(body.endsOn) : null;
+        if (body.endsOn && !endsOn) throw new HttpError(400, 'the end date should look like 2027-06-01');
+        let teacherId = who.role === 'teacher' ? who.teacherId : null;
+        if (who.role === 'owner' && body.teacherId) {
+          if (!UUID.test(body.teacherId)) throw new HttpError(400, 'unknown teacher');
+          teacherId = body.teacherId;
+        }
+        const data = { kind: 'manual', name, endsOn, createdAt: new Date(clock()).toISOString(), ...(teacherId ? { teacherId } : {}) };
+        // the owner may register a code students already use (classes made before teacher logins)
+        if (who.role === 'owner' && body.code) {
+          const code = cleanClassCode(body.code);
+          if (!code || code.startsWith('LTI-')) throw new HttpError(400, 'bad class code');
+          const made = await store.createClass(code, data);
+          if (!made) throw new HttpError(409, 'that class code is already registered');
+          return send(res, 201, { class: classOut(made) });
+        }
+        for (let i = 0; i < 5; i++) {
+          const made = await store.createClass(newClassCode(), data);
+          if (made) return send(res, 201, { class: classOut(made) });
+        }
+        throw new HttpError(500, 'could not make a class code, try again');
+      }
+      throw new HttpError(405, 'method not allowed');
+    }
+
+    // ----- teacher logins (owner only) -----
+    if (path === '/api/admin/teachers' || path.startsWith('/api/admin/teachers/')) {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      const who = await requireTeacher(req);
+      requireOwner(who);
+      if (path === '/api/admin/teachers') {
+        if (method === 'GET') return send(res, 200, { teachers: await store.listTeachers() });
+        if (method === 'POST') {
+          const body = await readJson(req);
+          const name = cleanName(body.name);
+          if (!name) throw new HttpError(400, "enter the teacher's name");
+          const key = newTeacherKey();
+          const teacher = { id: randomUUID(), name, keyHash: sha256('teacher:' + key) };
+          await store.createTeacher(teacher);
+          await store.addAudit('owner', 'add_teacher', { teacherId: teacher.id });
+          return send(res, 201, { teacher: { id: teacher.id, name }, key });
+        }
+        throw new HttpError(405, 'method not allowed');
+      }
+      const [id, sub] = path.slice('/api/admin/teachers/'.length).split('/');
+      if (!UUID.test(id)) throw new HttpError(404, 'not found');
+      if (method === 'POST' && sub === 'key') {
+        const key = newTeacherKey();
+        if (!(await store.setTeacherKey(id, sha256('teacher:' + key)))) throw new HttpError(404, 'teacher not found');
+        await store.addAudit('owner', 'new_teacher_key', { teacherId: id });
+        return send(res, 200, { key });
+      }
+      if (method === 'DELETE' && !sub) {
+        if (!(await store.deleteTeacher(id))) throw new HttpError(404, 'teacher not found');
+        await store.addAudit('owner', 'remove_teacher', { teacherId: id });
+        return send(res, 200, { removed: true });
+      }
+      throw new HttpError(404, 'not found');
+    }
+
+    if (method === 'GET' && path === '/api/admin/audit') {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      requireOwner(await requireTeacher(req));
+      return send(res, 200, { entries: await store.listAudit(200) });
     }
 
     // everything below needs a signed-in student
@@ -495,13 +702,17 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     }
   });
   server.on('close', () => clearInterval(sweep));
-  return { server, store, lti };
+  return { server, store, lti, runRetention };
 }
 
 // Run directly: node src/server.js
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const { server, store } = createApp();
+  const { server, store, runRetention } = createApp();
   await store.init({ migrate: process.env.AUTO_MIGRATE !== '0' });
+  // the retention schedule runs once at start and then every day
+  const prune = () => runRetention().then((r) => console.log('retention', JSON.stringify(r))).catch((err) => console.error('retention failed', err.message));
+  prune();
+  setInterval(prune, 86_400_000).unref();
   const port = Number(process.env.PORT || 3000);
   const host = process.env.HOST || '0.0.0.0';
   server.listen(port, host, () => console.log(`Runway Rally API on ${host}:${port} (${process.env.DATABASE_URL ? 'postgres' : 'memory store'})`));

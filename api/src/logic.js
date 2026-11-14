@@ -439,6 +439,7 @@ export function classSummary(students) {
     for (const k of SKILL_IDS) attempts[k] = s.skillStats?.[k]?.answered ?? 0;
     const recent = Object.values(s.recent).flat();
     return {
+      id: s.id,
       nickname: s.nickname,
       mastery: s.mastery,
       attempts,
