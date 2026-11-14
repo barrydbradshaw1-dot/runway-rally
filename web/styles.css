@@ -175,3 +175,23 @@ label { display: grid; gap: 6px; font-weight: 600; }
 .items { display: grid; gap: 8px; }
 .item { display: flex; justify-content: space-between; gap: 10px; background: #fff; border-radius: 14px; padding: 10px 14px; }
 .item.locked { opacity: 0.5; }
+
+/* learning upgrade */
+.small { font-size: 0.88rem; }
+.grow { flex: 1; }
+.streak { color: #c2410c; }
+.callout { border: 2px solid var(--violet); }
+.badge { justify-self: start; background: #e6fbf4; color: #0f7a5f; border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; font-weight: 700; }
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-weight: 500; }
+.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.code-big { font-size: 1.8rem; font-weight: 800; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; user-select: all; }
+.grownups summary { cursor: pointer; font-weight: 700; min-height: 32px; }
+.grownups[open] summary { margin-bottom: 12px; }
+input[readonly] { width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 14px; border: 2px solid #d8d0f5; background: #faf8ff; font-size: 0.9rem; }
+
+/* family progress page */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+.stat strong { display: block; font-size: 1.6rem; }
+.stat span { font-size: 0.85rem; color: var(--soft); }
+.skill-row { display: flex; justify-content: space-between; gap: 10px; }
+.block { display: block; }

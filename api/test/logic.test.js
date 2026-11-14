@@ -4,17 +4,20 @@ import { SKILL_IDS, makeTask, checkAnswer, parseNumber, mulberry32, THEMES } fro
 import { levelFor, updateMastery, pickSkill, chooseTheme, recordInterest, newInterest, isUnlocked } from '../src/adaptive.js';
 import { classSummary, newStudent, startCommission, nextTask, applyAnswer, giveHint, openPack, COMMISSION_LENGTH, PITY_LIMIT } from '../src/logic.js';
 
-test('every generator yields integer answers and distinct hints for many seeds', () => {
+test('every generator yields a checkable answer and a final hint that shows it, for many seeds', () => {
   for (const skill of SKILL_IDS) {
     for (const level of [1, 2, 3]) {
       for (const theme of THEMES) {
         for (let seed = 1; seed <= 300; seed++) {
           const t = makeTask(skill, level, theme, mulberry32(seed));
-          assert.ok(Number.isInteger(t.answer) && t.answer > 0, `${skill} L${level} seed ${seed}: answer ${t.answer}`);
+          const where = `${skill} L${level} ${theme} seed ${seed}`;
+          assert.ok(Number.isFinite(t.answer), `${where}: answer ${t.answer}`);
+          assert.equal(typeof t.answerText, 'string');
           assert.equal(t.hints.length, 3);
-          assert.ok(t.hints[2].includes(String(t.answer)), `${skill} final hint should show the answer`);
-          assert.ok(checkAnswer(t, String(t.answer)));
-          assert.ok(!checkAnswer(t, String(t.answer + 1)));
+          assert.ok(t.hints[2].includes(t.answerText), `${where}: final hint should show the answer`);
+          assert.ok(checkAnswer(t, t.answerText), `${where}: its own answer text should be accepted`);
+          assert.ok(!checkAnswer(t, String(t.answer + 1)), `${where}: a wrong answer should be refused`);
+          assert.ok(t.prompt.length > 10);
         }
       }
     }
@@ -55,11 +58,15 @@ test('prerequisites gate skills until they reach the unlock threshold', () => {
 
 test('repeated failure steps back to the weakest prerequisite', () => {
   const s = newStudent({ id: 'x', classCode: 'ABC', nickname: 'Test' });
-  s.mastery = { frac_part: 0.5, ratio: 0.45, frac_add: 0.5, percent: 0.5 };
-  s.wrongStreak.percent = 3;
+  // eq_two_step needs eq_one_step and int_mult; the weaker one is where she goes back to
+  for (const k of Object.keys(s.mastery)) s.mastery[k] = 0.6;
+  s.mastery.eq_one_step = 0.55;
+  s.mastery.int_mult = 0.42;
+  s.mastery.eq_two_step = 0.3;
+  s.wrongStreak.eq_two_step = 3;
   const { skill, repair } = pickSkill(s, mulberry32(1));
   assert.equal(repair, true);
-  assert.equal(skill, 'ratio');
+  assert.equal(skill, 'int_mult');
 });
 
 test('interest model follows explicit choices but still explores', () => {
@@ -100,10 +107,11 @@ test('two misses reveal the answer, pay effort thread, and never score below zer
   const s = newStudent({ id: 'u2', classCode: 'ABC', nickname: 'Test' });
   startCommission(s, { rng });
   const task = nextTask(s, rng);
-  applyAnswer(s, task, '0', rng);
-  const r = applyAnswer(s, task, '0', rng);
+  applyAnswer(s, task, '99999', rng);
+  const r = applyAnswer(s, task, '99999', rng);
   assert.equal(r.correct, false);
-  assert.equal(r.revealedAnswer, task.answer);
+  assert.equal(r.revealedAnswer, task.answerText);
+  assert.ok(Array.isArray(r.steps) && r.steps.length > 0, 'a miss shows the worked steps');
   assert.equal(r.thread, 1);
   assert.ok(s.mastery[task.skill] >= 0);
 });

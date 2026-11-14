@@ -293,8 +293,8 @@ test('finishing a commission posts a completion grade to the gradebook, creating
       const started = await api('/api/commission/start', { method: 'POST', token: tk, body: { theme: 'runway' } });
       let task = started.json.task;
       for (let n = 0; n < 5; n++) {
-        await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '-7' } });
-        const r = await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '-7' } });
+        await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '99999' } });
+        const r = await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '99999' } });
         if (r.json.next) task = r.json.next;
       }
     }
@@ -328,8 +328,8 @@ test('mastery mode reports average mastery across skills the student has tried',
       const started = await api('/api/commission/start', { method: 'POST', token: tk, body: {} });
       let task = started.json.task;
       for (let n = 0; n < 5; n++) {
-        await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '-7' } });
-        const r = await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '-7' } });
+        await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '99999' } });
+        const r = await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '99999' } });
         if (r.json.next) task = r.json.next;
       }
       await lti.settle();
@@ -348,8 +348,8 @@ test('a launch without grade services never tries to post a grade, and a failing
     let task = started.json.task;
     let last;
     for (let n = 0; n < 5; n++) {
-      await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '-7' } });
-      last = await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '-7' } });
+      await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '99999' } });
+      last = await api('/api/answer', { method: 'POST', token: tk, body: { taskId: task.id, answer: '99999' } });
       if (last.json.next) task = last.json.next;
     }
     assert.equal(last.json.commissionComplete, true);
