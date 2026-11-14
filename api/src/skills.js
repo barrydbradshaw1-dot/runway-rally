@@ -71,6 +71,16 @@ export const SKILLS = {
   proportion: sk('Proportions and scale drawings', ['unit_rate', 'dec_mult_div'], ['7.PAR.4'], 7),
   circles: sk('Circles', ['dec_mult_div'], ['7.GSR.5'], 7),
   probability: sk('Probability', ['frac_simplify', 'frac_mult'], ['7.PR.6'], 7),
+  // grade 8
+  exponents: sk('Exponents', ['int_mult'], ['8.NR.2'], 8),
+  sq_roots: sk('Square roots and cube roots', ['exponents'], ['8.NR.1', '8.NR.2'], 8),
+  sci_notation: sk('Scientific notation', ['exponents', 'dec_mult_div'], ['8.NR.2'], 8),
+  eq_multi_step: sk('Equations with x on both sides', ['eq_two_step', 'expr_equiv'], ['8.PAR.3'], 8),
+  slope: sk('Slope and y-intercept', ['coord_plane', 'int_mult', 'frac_simplify'], ['8.PAR.4', '8.FGR.5'], 8),
+  linear_models: sk('Linear functions and trend lines', ['slope', 'expr_eval'], ['8.FGR.5', '8.FGR.6'], 8),
+  systems: sk('Systems of equations', ['eq_multi_step', 'linear_models'], ['8.FGR.7'], 8),
+  pythagorean: sk('The Pythagorean theorem', ['sq_roots', 'coord_plane'], ['8.GSR.8'], 8),
+  volume_curved: sk('Volume of cylinders, cones and spheres', ['circles', 'area_volume', 'exponents'], ['8.GSR.8'], 8),
 };
 export const SKILL_IDS = Object.keys(SKILLS);
 
@@ -120,6 +130,15 @@ const STORIES = {
   circles: 'Round designs need careful measuring.',
   coord_plane: 'The studio is laid out on a grid. Find the distances.',
   probability: 'Mystery bags are the hit of the season. What are the chances?',
+  exponents: 'Patterns that double and triple get big fast. Powers keep the count tidy.',
+  sq_roots: 'Square patches and cube boxes: work back from the size to the side.',
+  sci_notation: 'The brand went viral. The numbers are huge, so write them the short way.',
+  eq_multi_step: 'Two price plans, one answer. Find where they match.',
+  slope: 'Every straight line on the plans has a steepness. Measure it.',
+  linear_models: 'Prices and sales follow straight-line patterns. Read them and predict.',
+  systems: 'Two clues, two unknowns. Find the one answer that fits both.',
+  pythagorean: 'Ramps, beams and diagonal cuts: find the slanted side.',
+  volume_curved: 'Round tins, cones and spheres all need the right amount of space.',
 };
 export const storyFor = (skill) => STORIES[skill];
 
@@ -1171,6 +1190,434 @@ function probability(level, theme, rng) {
   };
 }
 
+// ---------- grade 8 ----------
+const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+const sup = (n) => String(n).split('').map((c) => SUP[c] ?? c).join('');
+const commas = (n) => n.toLocaleString('en-US');
+
+// 8.NR.2: integer exponents
+function exponents(level, theme, rng) {
+  const lead = say(theme, { jewelry: 'Bead counts in a layered necklace grow by powers.', fabric: 'A pattern doubles and triples as it repeats.', runway: 'Show views grow by powers.' });
+  if (level === 1) {
+    const b = int(rng, 2, 5);
+    const n = b === 5 ? int(rng, 2, 3) : int(rng, 2, 4);
+    const v = b ** n;
+    return {
+      prompt: `${lead} What is ${b}${sup(n)}?`,
+      ...intAns(v),
+      hints: [`${b}${sup(n)} means ${n} copies of ${b} multiplied together.`, `${Array(n).fill(b).join(' × ')}.`, `${Array(n).fill(b).join(' × ')} = ${v}.`],
+      mistakes: [{ value: b * n, text: `That is ${b} × ${n}. The exponent says how many ${b}s to multiply together.` }],
+    };
+  }
+  const b = int(rng, 2, 9);
+  if (level === 2) {
+    const m = int(rng, 2, 7);
+    const n = int(rng, 2, 6);
+    const kind = int(rng, 0, 2);
+    if (kind === 0) {
+      return {
+        prompt: `${lead} ${b}${sup(m)} × ${b}${sup(n)} = ${b} to what power? Type the exponent.`,
+        ...intAns(m + n),
+        hints: ['When you multiply powers of the same base, add the exponents.', `${m} copies of ${b}, then ${n} more copies.`, `${m} + ${n} = ${m + n}, so ${b}${sup(m + n)}.`],
+        mistakes: [{ value: m * n, text: 'Multiplying powers with the same base adds the exponents. Multiplying exponents is for a power of a power.' }],
+      };
+    }
+    if (kind === 1) {
+      const top = m + n;
+      return {
+        prompt: `${lead} ${b}${sup(top)} ÷ ${b}${sup(n)} = ${b} to what power? Type the exponent.`,
+        ...intAns(m),
+        hints: ['When you divide powers of the same base, subtract the exponents.', `${n} of the ${b}s on top cancel with the ${b}s below.`, `${top} − ${n} = ${m}, so ${b}${sup(m)}.`],
+        mistakes: [{ value: top + n, text: 'Dividing powers with the same base subtracts the exponents.' }],
+      };
+    }
+    return {
+      prompt: `${lead} (${b}${sup(m)})${sup(n)} = ${b} to what power? Type the exponent.`,
+      ...intAns(m * n),
+      hints: ['A power of a power multiplies the exponents.', `That is ${n} copies of ${b}${sup(m)}, each with ${m} ${b}s.`, `${m} × ${n} = ${m * n}, so ${b}${sup(m * n)}.`],
+      mistakes: [{ value: m + n, text: 'For a power of a power, multiply the exponents instead of adding them.' }],
+    };
+  }
+  if (rng() < 0.3) {
+    const c = int(rng, 3, 12);
+    return {
+      prompt: `${lead} What is ${c}${sup(0)}?`,
+      ...intAns(1),
+      hints: ['Look at the pattern: each time the exponent drops by 1, you divide by the base.', `${c}${sup(1)} = ${c}, and ${c} ÷ ${c} = 1.`, `Any nonzero number to the power 0 is 1.`],
+      mistakes: [
+        { value: 0, text: 'A power of 0 does not give 0. Divide once more from the power of 1: the answer is 1.' },
+        { value: c, text: `That is ${c}${sup(1)}. Going down one more step divides by ${c}.` },
+      ],
+    };
+  }
+  const bb = int(rng, 2, 5);
+  const n = bb >= 4 ? 2 : int(rng, 2, 3);
+  const p = bb ** n;
+  return {
+    prompt: `${lead} Write ${bb}${sup(-n)} as a fraction.`,
+    ...fracAns(1, p, { requireFraction: true }),
+    hints: ['A negative exponent means one over the positive power.', `${bb}${sup(-n)} = 1 / ${bb}${sup(n)}.`, `${bb}${sup(n)} = ${p}, so the answer is 1/${p}.`],
+    mistakes: [
+      { value: -p, text: 'A negative exponent does not make the number negative. It means one over the power.' },
+      { value: -bb * n, text: 'A negative exponent means one over the power, not a negative number.' },
+    ],
+  };
+}
+
+// 8.NR.1, 8.NR.2: square roots and cube roots
+function sqRoots(level, theme, rng) {
+  const tile = say(theme, { jewelry: 'square charm', fabric: 'square quilt patch', runway: 'square stage panel' });
+  const unit = say(theme, { jewelry: 'mm', fabric: 'inches', runway: 'feet' });
+  if (level === 1) {
+    const k = int(rng, 2, 15);
+    return {
+      prompt: `What is √${k * k}?`,
+      ...intAns(k),
+      hints: ['The square root asks: what number times itself makes this?', `Try ${k - 1} × ${k - 1} = ${(k - 1) ** 2}. A little bigger.`, `${k} × ${k} = ${k * k}, so √${k * k} = ${k}.`],
+      mistakes: [{ value: (k * k) / 2, text: 'The square root is not half. It is the number that times itself makes the total.' }],
+    };
+  }
+  if (level === 2) {
+    if (rng() < 0.5) {
+      const k = int(rng, 3, 14);
+      return {
+        prompt: `A ${tile} has an area of ${k * k} square ${unit}. How long is each side?`,
+        ...intAns(k),
+        hints: ['Area of a square = side × side.', `Find the number that times itself is ${k * k}: that is √${k * k}.`, `${k} × ${k} = ${k * k}, so each side is ${k} ${unit}.`],
+        mistakes: [{ value: (k * k) / 4, text: 'Dividing by 4 gives a side from the perimeter. For area, take the square root.' }],
+      };
+    }
+    const k = int(rng, 2, 6);
+    return {
+      prompt: `A cube-shaped gift box holds ${k ** 3} cubic ${unit}. What is ∛${k ** 3}, the length of each edge?`,
+      ...intAns(k),
+      hints: ['The cube root asks: what number times itself 3 times makes this?', `Try ${k - 1} × ${k - 1} × ${k - 1} = ${(k - 1) ** 3}.`, `${k} × ${k} × ${k} = ${k ** 3}, so the edge is ${k} ${unit}.`],
+      mistakes: [{ value: k ** 3 / 3, text: 'The cube root is not a third. It is the number used 3 times in a multiplication.' }],
+    };
+  }
+  const k = int(rng, 3, 11);
+  const n = k * k + int(rng, 1, 2 * k);
+  return {
+    prompt: `√${n} is not a whole number. It sits between two whole numbers that are next to each other. What is the smaller one?`,
+    ...intAns(k),
+    hints: ['Find the perfect squares just below and just above.', `${k}² = ${k * k} and ${k + 1}² = ${(k + 1) ** 2}.`, `${k * k} < ${n} < ${(k + 1) ** 2}, so √${n} is between ${k} and ${k + 1}. The smaller one is ${k}.`],
+    mistakes: [
+      { value: k + 1, text: 'That is the larger of the two. The question asks for the smaller one.' },
+      { value: Math.floor(n / 2), text: 'The square root is not half. Look for the perfect squares near it.' },
+    ],
+  };
+}
+
+// 8.NR.2: scientific notation
+function sciNotation(level, theme, rng) {
+  const things = say(theme, { jewelry: 'beads', fabric: 'stitches', runway: 'views' });
+  if (level === 1) {
+    let m = int(rng, 11, 99);
+    if (m % 10 === 0) m += 1;
+    const e = int(rng, 3, 8);
+    const N = m * 10 ** (e - 1);
+    const c = (m / 10).toFixed(1);
+    return {
+      prompt: `The studio counted ${commas(N)} ${things} this year. Written in scientific notation that is ${c} × 10 to some power. What is the exponent?`,
+      ...intAns(e),
+      hints: ['Move the decimal point left until there is one digit in front of it. Count the moves.', `${commas(N)} becomes ${c}.`, `The point moved ${e} places, so ${commas(N)} = ${c} × 10${sup(e)}. The exponent is ${e}.`],
+      mistakes: [{ value: e - 1, text: 'That counts only the zeros. Count every place the decimal point moves, past every digit.' }],
+    };
+  }
+  if (level === 2) {
+    const a = int(rng, 1, 4);
+    const b = int(rng, 2, Math.floor(9 / a));
+    const p = int(rng, 2, 8);
+    const q = int(rng, 2, 6);
+    return {
+      prompt: `(${a} × 10${sup(p)}) × (${b} × 10${sup(q)}) = ${a * b} × 10 to what power? Type the exponent.`,
+      ...intAns(p + q),
+      hints: ['Multiply the front numbers, then multiply the powers of 10.', `${a} × ${b} = ${a * b}. For 10${sup(p)} × 10${sup(q)}, add the exponents.`, `${p} + ${q} = ${p + q}, so ${a * b} × 10${sup(p + q)}.`],
+      mistakes: [{ value: p * q, text: 'Multiplying powers of 10 adds the exponents.' }],
+    };
+  }
+  const c = int(rng, 2, 9);
+  const q = int(rng, 3, 6);
+  const d = int(rng, 2, 4);
+  const p = q + d;
+  const times = 10 ** d;
+  return {
+    prompt: `One runway video has ${c} × 10${sup(p)} views. Another has ${c} × 10${sup(q)} views. How many times more views does the first one have?`,
+    ...intAns(times),
+    hints: ['The front numbers match, so compare the powers of 10.', `10${sup(p)} ÷ 10${sup(q)} = 10${sup(p - q)}.`, `10${sup(d)} = ${commas(times)}, so ${times} times more.`],
+    mistakes: [{ value: d, text: `${d} is the difference in exponents. The answer is 10 to that power.` }],
+  };
+}
+
+// 8.PAR.3: equations with variables on both sides
+function eqMultiStep(level, theme, rng) {
+  const cx = (c) => (c === 1 ? 'x' : `${c}x`);
+  if (level === 1) {
+    const x = int(rng, -6, 9);
+    const a = int(rng, 3, 9);
+    const c = int(rng, 1, a - 1);
+    const b = int(rng, 1, 20);
+    const d = (a - c) * x + b;
+    return {
+      prompt: `Solve for x: ${a}x + ${b} = ${cx(c)} + ${neg(d)}`,
+      ...intAns(x),
+      hints: [`Get the x terms on one side: subtract ${cx(c)} from both sides.`, `${a - c}x + ${b} = ${d}. Now subtract ${b}: ${a - c}x = ${d - b}.`, `x = ${d - b} ÷ ${a - c} = ${x}.`],
+      mistakes: [
+        { value: (d - b) / (a + c), text: `Subtract ${cx(c)} from both sides instead of adding it.` },
+        { value: (d + b) / (a - c), text: `Undo + ${b} by subtracting ${b} from both sides.` },
+      ],
+    };
+  }
+  if (level === 2) {
+    const x = int(rng, -5, 9);
+    const a = int(rng, 2, 6);
+    const b = int(rng, 1, 8);
+    const c = int(rng, 1, a - 1);
+    const d = a * (x + b) - c * x;
+    return {
+      prompt: `Solve for x: ${a}(x + ${b}) = ${cx(c)} + ${neg(d)}`,
+      ...intAns(x),
+      hints: [`Distribute first: ${a}(x + ${b}) = ${a}x + ${a * b}.`, `${a}x + ${a * b} = ${cx(c)} + ${d}. Subtract ${cx(c)} and ${a * b}: ${a - c}x = ${d - a * b}.`, `x = ${d - a * b} ÷ ${a - c} = ${x}.`],
+      mistakes: [{ value: (d - b) / (a - c), text: `Multiply the ${a} by both terms in the parentheses, the x and the ${b}.` }],
+    };
+  }
+  const h = int(rng, 2, 12);
+  const s = int(rng, 2, 8);
+  const r = s + int(rng, 1, 5);
+  const p = int(rng, 2, 10) * 5;
+  const q = p + (r - s) * h;
+  const what = say(theme, { jewelry: 'jewelry bench', fabric: 'sewing room', runway: 'photo studio' });
+  return {
+    prompt: `Renting a ${what}: Studio A charges $${p} plus $${r} an hour. Studio B charges $${q} plus $${s} an hour. After how many hours do they cost the same?`,
+    ...intAns(h),
+    hints: [`Write it as an equation: ${p} + ${r}h = ${q} + ${s}h.`, `Subtract ${s}h and ${p} from both sides: ${r - s}h = ${q - p}.`, `h = ${q - p} ÷ ${r - s} = ${h} hours.`],
+    mistakes: [{ value: (q - p) / (r + s), text: `Subtract ${s}h from both sides. The hourly rates subtract, they do not add.` }],
+  };
+}
+
+// 8.PAR.4, 8.FGR.5: slope and y-intercept
+function slope(level, theme, rng) {
+  const place = say(theme, { jewelry: 'a sketch of a chain', fabric: 'a cutting line on the grid', runway: 'a ramp on the stage plan' });
+  if (level === 1) {
+    const m = int(rng, 1, 5);
+    const x1 = int(rng, 0, 4);
+    const dx = int(rng, 1, 4);
+    const y1 = int(rng, 0, 10);
+    const x2 = x1 + dx;
+    const y2 = y1 + m * dx;
+    return {
+      prompt: `On ${place}, a straight line goes through (${x1}, ${y1}) and (${x2}, ${y2}). What is its slope?`,
+      ...intAns(m),
+      hints: ['Slope = rise ÷ run = change in y ÷ change in x.', `Rise: ${y2} − ${y1} = ${y2 - y1}. Run: ${x2} − ${x1} = ${dx}.`, `${y2 - y1} ÷ ${dx} = ${m}.`],
+      mistakes: [
+        { value: dx / (m * dx), text: 'That is run over rise. Slope is rise over run: change in y on top.' },
+        { value: m * dx, text: `That is the rise. Divide it by the run, ${dx}.` },
+      ],
+    };
+  }
+  if (level === 2) {
+    const sign = rng() < 0.6 ? -1 : 1;
+    const pairs = [[1, 2], [2, 3], [3, 2], [1, 3], [3, 4], [2, 5], [4, 3]];
+    const [pp, qq] = pick(rng, pairs);
+    const k = int(rng, 1, 2);
+    const dy = sign * pp * k;
+    const dx = qq * k;
+    const x1 = int(rng, -4, 3);
+    const y1 = int(rng, -3, 8);
+    const x2 = x1 + dx;
+    const y2 = y1 + dy;
+    const ans = fracAns(dy, dx, { simplest: true });
+    return {
+      prompt: `On ${place}, a straight line goes through (${x1}, ${y1}) and (${x2}, ${y2}). What is its slope? A fraction is fine.`,
+      ...ans,
+      hints: ['Slope = change in y ÷ change in x. A line going down to the right has a negative slope.', `Change in y: ${y2} − ${neg(y1)} = ${dy}. Change in x: ${x2} − ${neg(x1)} = ${dx}.`, k === 1 ? `Slope = ${ans.answerText}.` : `${dy}/${dx} simplifies to ${ans.answerText}.`],
+      mistakes: [{ value: dx / dy, text: 'That is run over rise. Put the change in y on top.' }],
+    };
+  }
+  const m = pick(rng, [-4, -3, -2, 2, 3, 4, 5]);
+  const x1 = int(rng, 1, 5);
+  const b = int(rng, -8, 12);
+  const y1 = m * x1 + b;
+  return {
+    prompt: `A line in the form y = mx + b has slope ${m} and goes through (${x1}, ${y1}). What is b, the y-intercept?`,
+    ...intAns(b),
+    hints: [`Put the point into y = ${m}x + b: ${y1} = ${m} × ${x1} + b.`, `${m} × ${x1} = ${m * x1}, so ${y1} = ${m * x1} + b.`, `b = ${y1} − ${neg(m * x1)} = ${b}.`],
+    mistakes: [
+      { value: y1 + m * x1, text: `Subtract ${m * x1} from ${y1} to get b, instead of adding it.` },
+      { value: y1 - x1, text: `Multiply the slope by x first: ${m} × ${x1}.` },
+    ],
+  };
+}
+
+// 8.FGR.5, 8.FGR.6: linear functions and trend lines
+function linearModels(level, theme, rng) {
+  const job = say(theme, { jewelry: 'a custom ring order', fabric: 'a tailoring job', runway: 'a photo shoot' });
+  const r = int(rng, 3, 15) * 5;
+  const c = int(rng, 2, 12) * 5;
+  const xs = level === 1 ? [1, 2, 3] : [2, 3, 4];
+  const table = xs.map((x) => `${x} ${x === 1 ? 'hour' : 'hours'}: $${r * x + c}`).join(', ');
+  if (level === 1) {
+    return {
+      prompt: `The price for ${job} goes up by the same amount each hour. ${table}. What is the rate of change, in dollars per hour?`,
+      ...intAns(r),
+      hints: ['Rate of change = how much the price goes up for each extra hour.', `From 1 hour to 2 hours: ${r * 2 + c} − ${r + c}.`, `${r * 2 + c} − ${r + c} = ${r} dollars per hour.`],
+      mistakes: [{ value: r + c, text: 'That is the price for 1 hour, including the starting fee. Find how much it goes up each hour.' }],
+    };
+  }
+  if (level === 2) {
+    return {
+      prompt: `The price for ${job} is a starting fee plus the same amount each hour. ${table}. What is the starting fee, the price at 0 hours?`,
+      ...intAns(c),
+      hints: [`First find the rate: ${r * 3 + c} − ${r * 2 + c} = ${r} per hour.`, `Go back from 2 hours to 0 hours: take away ${r} twice.`, `${r * 2 + c} − ${2 * r} = ${c} dollars.`],
+      mistakes: [
+        { value: r, text: 'That is the hourly rate. The starting fee is the price at 0 hours.' },
+        { value: r + c, text: 'That is 1 hour. Go back one more hour to reach 0.' },
+      ],
+    };
+  }
+  const m = int(rng, 2, 9);
+  const b = int(rng, 5, 40);
+  const w = int(rng, 6, 20);
+  const what = say(theme, { jewelry: 'bracelets sold', fabric: 'scarves sold', runway: 'tickets sold' });
+  return {
+    prompt: `A scatter plot of ${what} each week has a trend line y = ${m}x + ${b}, where x is the week number. Use it to predict y for week ${w}.`,
+    ...intAns(m * w + b),
+    hints: [`Put x = ${w} into y = ${m}x + ${b}.`, `${m} × ${w} = ${m * w}.`, `${m * w} + ${b} = ${m * w + b}.`],
+    mistakes: [
+      { value: m * w, text: `Remember to add the starting value, ${b}.` },
+      { value: m + w + b, text: `${m}x means ${m} times x. Multiply before you add.` },
+    ],
+  };
+}
+
+// 8.FGR.7: systems of linear equations
+function systems(level, theme, rng) {
+  if (level < 3) {
+    const x = int(rng, -4, 8);
+    const a = int(rng, 2, 6);
+    const c = int(rng, -3, a - 1);
+    const b = int(rng, -10, 10);
+    const y = a * x + b;
+    const d = y - c * x;
+    const cx = c === 1 ? 'x' : c === -1 ? '−x' : c === 0 ? '' : `${c}x`;
+    const right = c === 0 ? `${d}` : `${cx}${d < 0 ? ` − ${-d}` : ` + ${d}`}`;
+    const left = `${a}x${b < 0 ? ` − ${-b}` : ` + ${b}`}`;
+    const sys = `y = ${left} and y = ${right}`;
+    if (level === 1) {
+      return {
+        prompt: `Two lines: ${sys}. They cross at one point. What is the x-value there?`,
+        ...intAns(x),
+        hints: ['Where the lines cross, both y-values are the same. Set the right sides equal.', `${left} = ${right}.`, `Solve it: ${a - c}x = ${d - b}, so x = ${x}.`],
+        mistakes: [{ value: y, text: 'That is the y-value at the crossing. The question asks for x.' }],
+      };
+    }
+    return {
+      prompt: `Two lines: ${sys}. They cross at one point. What is the y-value there?`,
+      ...intAns(y),
+      hints: [`Set them equal: ${left} = ${right}. That gives x = ${x}.`, `Put x = ${x} into y = ${left}.`, `y = ${a} × ${neg(x)} + ${neg(b)} = ${y}.`],
+      mistakes: [{ value: x, text: `That is the x-value. Put it back into either equation to find y.` }],
+    };
+  }
+  const item = say(theme, { jewelry: ['gold charms', 'silver charms'], fabric: ['silk scarves', 'cotton scarves'], runway: ['front-row tickets', 'regular tickets'] });
+  const pa = int(rng, 6, 15);
+  const pb = int(rng, 2, pa - 2);
+  const xa = int(rng, 3, 20);
+  const xb = int(rng, 3, 20);
+  const total = xa + xb;
+  const cost = pa * xa + pb * xb;
+  return {
+    prompt: `The boutique sold ${total} ${item[0].split(' ').pop()} in all: ${item[0]} at $${pa} each and ${item[1]} at $${pb} each. The total was $${cost}. How many ${item[0]} were sold?`,
+    ...intAns(xa),
+    hints: [`Let g = ${item[0]} and s = ${item[1]}: g + s = ${total} and ${pa}g + ${pb}s = ${cost}.`, `If all ${total} were ${item[1]}: ${pb} × ${total} = ${pb * total}. The extra $${cost - pb * total} comes from the ${item[0]}.`, `Each one adds $${pa - pb}, so ${cost - pb * total} ÷ ${pa - pb} = ${xa}.`],
+    mistakes: [{ value: xb, text: `That is how many ${item[1]} were sold. The question asks about ${item[0]}.` }],
+  };
+}
+
+// 8.GSR.8: the Pythagorean theorem
+const TRIPLES = [[3, 4, 5], [6, 8, 10], [5, 12, 13], [9, 12, 15], [8, 15, 17], [12, 16, 20], [7, 24, 25], [20, 21, 29], [9, 40, 41]];
+function pythagorean(level, theme, rng) {
+  const [a, b, c] = pick(rng, TRIPLES);
+  const unit = say(theme, { jewelry: 'mm', fabric: 'inches', runway: 'feet' });
+  if (level === 1) {
+    const what = say(theme, { jewelry: 'A triangle pendant', fabric: 'A corner patch', runway: 'A stage ramp' });
+    return {
+      prompt: `${what} is a right triangle with legs ${a} and ${b} ${unit}. How long is the longest side, the hypotenuse?`,
+      ...intAns(c),
+      hints: ['a² + b² = c², where c is the hypotenuse.', `${a}² + ${b}² = ${a * a} + ${b * b} = ${c * c}.`, `c = √${c * c} = ${c} ${unit}.`],
+      mistakes: [
+        { value: a + b, text: 'You added the sides. Square them, add, then take the square root.' },
+        { value: c * c, text: `That is c². Take the square root to get c.` },
+      ],
+    };
+  }
+  if (level === 2) {
+    const what = say(theme, { jewelry: 'a display stand', fabric: 'a cutting table', runway: 'a backdrop' });
+    return {
+      prompt: `A ${c}-${unit} support beam leans against ${what}. Its bottom is ${a} ${unit} from the base. How high up does it reach?`,
+      ...intAns(b),
+      hints: ['The beam is the hypotenuse: a² + b² = c².', `${a}² + b² = ${c}², so b² = ${c * c} − ${a * a} = ${b * b}.`, `b = √${b * b} = ${b} ${unit}.`],
+      mistakes: [
+        { value: c - a, text: 'Subtract the squares, not the sides: c² − a², then take the square root.' },
+        { value: Math.sqrt(a * a + c * c), text: 'The beam is already the longest side. Subtract the squares instead of adding.' },
+      ],
+    };
+  }
+  const x1 = int(rng, -6, 3);
+  const y1 = int(rng, -6, 3);
+  const sx = rng() < 0.5 ? 1 : -1;
+  const x2 = x1 + a;
+  const y2 = y1 + sx * b;
+  const place = say(theme, { jewelry: 'the display grid', fabric: 'the cutting mat grid', runway: 'the stage grid' });
+  return {
+    prompt: `On ${place}, how far is it in a straight line from (${x1}, ${y1}) to (${x2}, ${y2})?`,
+    ...intAns(c),
+    hints: [`Make a right triangle. Across: ${x2} − ${neg(x1)} = ${a}. Up or down: ${Math.abs(y2 - y1)}.`, `${a}² + ${b}² = ${a * a} + ${b * b} = ${c * c}.`, `The distance is √${c * c} = ${c}.`],
+    mistakes: [{ value: a + b, text: 'That walks along the grid lines. The straight line is the hypotenuse: square, add, square root.' }],
+  };
+}
+
+// 8.GSR.8: volume of cylinders, cones and spheres (use 3.14 for pi)
+function volumeCurved(level, theme, rng) {
+  const unit = say(theme, { jewelry: 'cm', fabric: 'inches', runway: 'feet' });
+  if (level === 1) {
+    const r = int(rng, 1, 6);
+    const h = int(rng, 2, 10);
+    const what = say(theme, { jewelry: 'round bead tin', fabric: 'thread spool case', runway: 'round display stand' });
+    return {
+      prompt: `A ${what} is a cylinder with radius ${r} ${unit} and height ${h} ${unit}. Use 3.14 for pi. What is its volume in cubic ${unit}?`,
+      ...decAns(314 * r * r * h),
+      hints: ['Volume of a cylinder = pi × radius × radius × height.', `Base area: 3.14 × ${r} × ${r} = ${money(314 * r * r)}.`, `${money(314 * r * r)} × ${h} = ${money(314 * r * r * h)} cubic ${unit}.`],
+      mistakes: [
+        { value: (314 * 4 * r * r * h) / 100, text: 'You used the diameter. Use the radius: half the width.' },
+        { value: (628 * r * h) / 100, text: 'You used 2 × radius instead of radius × radius.' },
+      ],
+    };
+  }
+  if (level === 2) {
+    const r = int(rng, 1, 6);
+    const h = 3 * int(rng, 1, 4);
+    const what = say(theme, { jewelry: 'cone-shaped earring mold', fabric: 'cone of yarn', runway: 'cone-shaped lamp' });
+    return {
+      prompt: `A ${what} has radius ${r} ${unit} and height ${h} ${unit}. Use 3.14 for pi. What is its volume in cubic ${unit}?`,
+      ...decAns((314 * r * r * h) / 3),
+      hints: ['A cone holds one third of the cylinder with the same base and height.', `Cylinder: 3.14 × ${r} × ${r} × ${h} = ${money(314 * r * r * h)}.`, `${money(314 * r * r * h)} ÷ 3 = ${money((314 * r * r * h) / 3)} cubic ${unit}.`],
+      mistakes: [{ value: (314 * r * r * h) / 100, text: 'That is the cylinder. A cone is one third of it, so divide by 3.' }],
+    };
+  }
+  const r = pick(rng, [3, 6]);
+  const what = say(theme, { jewelry: 'glass bead', fabric: 'round pincushion', runway: 'giant disco ball' });
+  const cents = (314 * 4 * r ** 3) / 3;
+  return {
+    prompt: `A ${what} is a sphere with radius ${r} ${unit}. Use 3.14 for pi. What is its volume in cubic ${unit}?`,
+    ...decAns(cents),
+    hints: ['Volume of a sphere = 4/3 × pi × radius × radius × radius.', `${r} × ${r} × ${r} = ${r ** 3}, and 3.14 × ${r ** 3} = ${money(314 * r ** 3)}.`, `${money(314 * r ** 3)} × 4 ÷ 3 = ${money(cents)} cubic ${unit}.`],
+    mistakes: [
+      { value: (314 * r ** 3) / 100, text: 'Remember to multiply by 4/3.' },
+      { value: (314 * 4 * r * r) / 300, text: 'Use the radius three times: radius × radius × radius.' },
+    ],
+  };
+}
+
 const GENERATORS = {
   mult_facts: multFacts,
   div_facts: divFacts,
@@ -1200,6 +1647,15 @@ const GENERATORS = {
   circles,
   coord_plane: coordPlane,
   probability,
+  exponents,
+  sq_roots: sqRoots,
+  sci_notation: sciNotation,
+  eq_multi_step: eqMultiStep,
+  slope,
+  linear_models: linearModels,
+  systems,
+  pythagorean,
+  volume_curved: volumeCurved,
 };
 
 export function makeTask(skill, level, theme, rng) {

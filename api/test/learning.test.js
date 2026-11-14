@@ -368,12 +368,12 @@ test('recovery codes are readable and forgiving to type', () => {
 // ---------- Georgia standards and the grade 6 and 7 additions ----------
 
 test('every skill carries Georgia standard codes and the grade Georgia first teaches it', () => {
-  const code = /^[3-8]\.(NR|PAR|GSR|PR|MDR|DSR)\.\d+$/;
+  const code = /^[3-8]\.(NR|PAR|GSR|PR|MDR|DSR|FGR)\.\d+$/;
   for (const id of SKILL_IDS) {
     const s = SKILLS[id];
     assert.ok(s.codes.length > 0, `${id} has no code`);
     for (const c of s.codes) assert.match(c, code, `${id}: ${c}`);
-    assert.ok(s.grade >= 3 && s.grade <= 7, `${id} grade ${s.grade}`);
+    assert.ok(s.grade >= 3 && s.grade <= 8, `${id} grade ${s.grade}`);
     assert.equal(Number(s.codes[0][0]), Math.min(...s.codes.map((c) => Number(c[0]))), `${id}: earliest code first`);
     assert.equal(s.standard, s.codes.join(', '));
   }
@@ -438,4 +438,66 @@ test('the family summary carries Georgia codes and grades', () => {
   assert.equal(w.standard, '6.PAR.7, 7.PAR.3');
   assert.equal(w.grade, 6);
   void rng;
+});
+
+// ---------- grade 8 ----------
+
+test('the skill map covers all eight grade 8 standards', () => {
+  const covered = new Set(SKILL_IDS.flatMap((id) => SKILLS[id].codes));
+  for (const c of ['8.NR.1', '8.NR.2', '8.PAR.3', '8.PAR.4', '8.FGR.5', '8.FGR.6', '8.FGR.7', '8.GSR.8']) {
+    assert.ok(covered.has(c), `${c} not covered`);
+  }
+  for (const id of ['exponents', 'sq_roots', 'sci_notation', 'eq_multi_step', 'slope', 'linear_models', 'systems', 'pythagorean', 'volume_curved']) {
+    assert.equal(SKILLS[id].grade, 8, id);
+  }
+});
+
+test('grade 8 skills build on grade 7 skills', () => {
+  assert.ok(ancestorsOf('systems').has('eq_two_step'));
+  assert.ok(ancestorsOf('pythagorean').has('sq_roots'));
+  assert.ok(ancestorsOf('volume_curved').has('circles'));
+  assert.ok(ancestorsOf('linear_models').has('coord_plane'));
+  assert.ok(depthOf('systems') > depthOf('eq_two_step'));
+});
+
+test('negative exponents want a fraction, and a negative number gets named', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const t = makeTask('exponents', 3, 'fabric', mulberry32(seed));
+    if (!/as a fraction/.test(t.prompt)) continue;
+    assert.ok(gradeAnswer(t, t.answerText).correct);
+    assert.match(gradeAnswer(t, String(t.answer)).note || '', /fraction/);
+    assert.match(diagnose(t, String(-1 / t.answer)), /not make the number negative/);
+  }
+});
+
+test('equations with x on both sides have whole-number answers that check', () => {
+  for (let seed = 1; seed <= 80; seed++) {
+    const t = makeTask('eq_multi_step', 1, 'runway', mulberry32(seed));
+    const [, a, b, c, d] = /Solve for x: (\d+)x \+ (\d+) = (\d*)x \+ \(?(-?\d+)\)?/.exec(t.prompt);
+    const x = t.answer;
+    assert.ok(Number.isInteger(x));
+    assert.equal(Number(a) * x + Number(b), Number(c || 1) * x + Number(d));
+  }
+});
+
+test('slope takes rise over run, simplified, and names the flip', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const t = makeTask('slope', 2, 'jewelry', mulberry32(seed));
+    const [, x1, y1, x2, y2] = /\((-?\d+), (-?\d+)\) and \((-?\d+), (-?\d+)\)/.exec(t.prompt).map(Number);
+    assert.ok(Math.abs(t.answer - (y2 - y1) / (x2 - x1)) < 1e-9);
+    assert.match(diagnose(t, String((x2 - x1) / (y2 - y1))), /run over rise/);
+  }
+});
+
+test('Pythagorean problems and volumes come out exact', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const t = makeTask('pythagorean', 1, 'fabric', mulberry32(seed));
+    const [, a, b] = /legs (\d+) and (\d+)/.exec(t.prompt).map(Number);
+    assert.equal(t.answer * t.answer, a * a + b * b);
+    assert.match(diagnose(t, String(a + b)), /added the sides/);
+  }
+  const cone = makeTask('volume_curved', 2, 'runway', mulberry32(5));
+  const [, r, h] = /radius (\d+) feet and height (\d+)/.exec(cone.prompt).map(Number);
+  assert.ok(Math.abs(cone.answer - (3.14 * r * r * h) / 3) < 1e-9);
+  assert.match(diagnose(cone, String(Math.round(314 * r * r * h) / 100)), /one third/);
 });

@@ -6,7 +6,7 @@ This is the pilot starter for the design in the Runway Rally Game Design Documen
 **What works now**
 - Browser client (installable PWA): sign in with class code + nickname, pick a themed commission, number pad, layered hints, retries, Thread rewards, item unlocks that appear on the avatar, card packs with a pity rule.
 - Server-side grading and rewards. Answers never reach the client.
-- Adaptive engine v2 (see "How it teaches" below): 28 skills tied to Georgia's grade 3 to 7 math standards, a short skills check that places each student, worked examples, steadier difficulty, mistake-specific feedback, spaced review, and prerequisite repair after repeated misses. The interest model still follows which areas the student picks (with 20% exploration).
+- Adaptive engine v2 (see "How it teaches" below): 37 skills tied to Georgia's grade 3 to 8 math standards, a short skills check that places each student, worked examples, steadier difficulty, mistake-specific feedback, spaced review, and prerequisite repair after repeated misses. The interest model still follows which areas the student picks (with 20% exploration).
 - Sign-in code (`RR-XXXX-XXXX`) so progress follows the student to a new device, and a private read-only family progress page at `/progress/`.
 - **Teacher console** at `/admin/`: sign in with the class code and `ADMIN_TOKEN`, then see a mastery heat map by skill, accuracy, favorite game areas, suggested small groups, who has not started, sorting, auto-refresh, and CSV export. A skill is flagged only after 2+ answers with mastery under 40%, or 3 misses in a row. Skills not yet tried are never flagged.
 - Postgres storage (or an in-memory store for development), Docker Compose with automatic HTTPS, backup and restore scripts.
@@ -127,16 +127,17 @@ Tested against a simulated Brightspace (`api/test/lti.test.js`: fake keyset, tok
 
 The learning design follows well-established findings: start where the student is, show a worked example before practice, keep success around 70 to 85 percent, give feedback on the actual mistake, space review out over days, and keep sessions short.
 
-- **Skill map.** 28 skills in a prerequisite graph, from times tables to two-step equations, inequalities, proportions, circles and probability. A skill opens when every prerequisite reaches 40 percent. Answers can be whole numbers, negatives, decimals or fractions; fraction-only problems explain kindly when a fraction is not in lowest terms.
-- **Georgia standards.** Every skill lists the Georgia K-12 Mathematics Standards it practices (`codes` in `api/src/skills.js`) and the grade where Georgia first teaches it. Students never see codes; the family page and teacher console do. Codes were checked in November 2026 against GaDOE's grade 5 and grade 7 curriculum maps, the K-8 standards document, and the CASE registry at case.georgiastandards.org.
+- **Skill map.** 37 skills in a prerequisite graph, from times tables through grade 8: exponents, square roots, scientific notation, equations with x on both sides, slope, linear functions and trend lines, systems of equations, the Pythagorean theorem, and volumes of cylinders, cones and spheres. A skill opens when every prerequisite reaches 40 percent. Answers can be whole numbers, negatives, decimals or fractions; fraction-only problems explain kindly when a fraction is not in lowest terms.
+- **Georgia standards.** Every skill lists the Georgia K-12 Mathematics Standards it practices (`codes` in `api/src/skills.js`) and the grade where Georgia first teaches it. Students never see codes; the family page and teacher console do. Codes were checked in November 2026 against GaDOE's grade 5 and grade 7 curriculum maps, the K-8 standards document (2021) including its grade 8 section, and the CASE registry at case.georgiastandards.org. Grade 8 matters most: Georgia requires at least Developing Learner on the grade 8 Milestones math test for promotion to grade 9.
 
   | Grade | Standards covered |
   | --- | --- |
   | 3 to 5 foundations | 3.PAR.3, 3.NR.4, 4.NR.4, 5.NR.3, 5.NR.4 |
   | 6 | 6.NR.1, 6.NR.3, 6.NR.4, 6.PAR.6, 6.PAR.7, 6.PAR.8, 6.GSR.5 |
   | 7 | 7.NR.1, 7.PAR.2, 7.PAR.3, 7.PAR.4, 7.GSR.5, 7.PR.6 |
+  | 8 | 8.NR.1, 8.NR.2, 8.PAR.3, 8.PAR.4, 8.FGR.5, 8.FGR.6, 8.FGR.7, 8.GSR.8 |
 
-  Not covered yet: grade 7 sampling (part of 7.PAR.4), graphing proportional relationships, angle relationships and cross sections (7.GSR.5), and all of grade 8. Grade 8 codes were not checked because GaDOE's grade 8 document could not be read.
+  Every grade 8 standard has at least one skill. Not covered yet: grade 7 sampling (part of 7.PAR.4), graphing proportional relationships, angle relationships and cross sections (7.GSR.5), and the parts of grade 8 that need drawing rather than a typed answer (sketching graphs, scatter plots, proofs of the Pythagorean theorem).
 - **Skills check.** Up to 18 questions, foundations first, no hints and no score, with a "Not sure yet" button. A right answer marks that skill and everything under it as known; a miss (confirmed by a second question on skills many others depend on) marks it and everything built on it as a gap, so a struggling student answers only a few questions. Known skills start at 65 percent, gaps at 20 percent.
 - **Worked example.** The first time a student meets a skill at a new level, they see one solved step by step before trying one.
 - **Difficulty.** Two misses in a row step down a level, two clean wins step up, and mostly-wrong recent work drops to confidence builders. Easy problems can show at most 60 percent mastery and medium 85 percent, so a skill only reads as mastered after hard problems.
