@@ -426,3 +426,60 @@ test('retention days can be changed or turned off with settings', async () => {
   assert.equal(retentionConfig({ RETENTION_ANSWER_DAYS: 'soon' }).answerDays, 365);
   assert.equal(retentionConfig({ RETENTION_INACTIVE_DAYS: '0' }).inactiveDays, 0);
 });
+
+test('the phone apps can call the API from their own origin, and no other site can', async () => {
+  const { server, call } = await boot();
+  try {
+    for (const origin of ['capacitor://localhost', 'https://localhost']) {
+      const pre = await call('/api/session', { method: 'OPTIONS', headers: { origin, 'access-control-request-method': 'POST' } });
+      assert.equal(pre.status, 204);
+      assert.equal(pre.headers.get('access-control-allow-origin'), origin);
+      assert.match(pre.headers.get('access-control-allow-headers'), /authorization/);
+      const s = await call('/api/session', { method: 'POST', headers: { origin }, body: { classCode: 'ROOM1', nickname: 'Ava' } });
+      assert.equal(s.status, 201);
+      assert.equal(s.headers.get('access-control-allow-origin'), origin);
+    }
+    const other = await call('/api/session', { method: 'POST', headers: { origin: 'https://evil.example' }, body: { classCode: 'ROOM1', nickname: 'Bo' } });
+    assert.equal(other.headers.get('access-control-allow-origin'), null);
+    // the website pages never get CORS headers
+    const page = await call('/', { headers: { origin: 'capacitor://localhost' } });
+    assert.equal(page.headers.get('access-control-allow-origin'), null);
+  } finally {
+    server.close();
+  }
+});
+
+test('APP_ORIGINS can change or turn off the app origins', async () => {
+  const { server, call } = await boot({ env: { APP_ORIGINS: '' } });
+  try {
+    const s = await call('/api/state', { headers: { origin: 'capacitor://localhost' } });
+    assert.equal(s.headers.get('access-control-allow-origin'), null);
+  } finally {
+    server.close();
+  }
+});
+
+test('a student can delete their own data after typing their nickname', async () => {
+  const { server, call, store } = await boot();
+  try {
+    const s = await call('/api/session', { method: 'POST', body: { classCode: 'ROOM1', nickname: 'Ava' } });
+    const token = s.json.token;
+    const other = await call('/api/session', { method: 'POST', body: { classCode: 'ROOM1', nickname: 'Bo' } });
+    assert.equal((await call('/api/me', { method: 'DELETE', token, body: { confirm: 'wrong' } })).status, 400);
+    assert.equal((await call('/api/me', { method: 'DELETE', token, body: {} })).status, 400);
+    const del = await call('/api/me', { method: 'DELETE', token, body: { confirm: ' ava ' } });
+    assert.equal(del.status, 200);
+    assert.equal(del.json.deleted, 1);
+    assert.equal((await call('/api/state', { token })).status, 401);
+    // the recovery code no longer works either
+    assert.equal((await call('/api/session/recover', { method: 'POST', body: { code: s.json.recoveryCode } })).status, 404);
+    // other students are untouched
+    assert.equal((await call('/api/state', { token: other.json.token })).status, 200);
+    const audit = await store.listAudit(10);
+    const entry = audit.find((e) => e.action === 'delete_self');
+    assert.ok(entry);
+    assert.ok(!JSON.stringify(entry).includes('Ava'));
+  } finally {
+    server.close();
+  }
+});

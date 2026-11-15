@@ -136,6 +136,15 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return Number.isInteger(n) && Math.abs(n) <= 840 ? n : 0;
   };
   const retention = retentionConfig(env);
+  // The phone apps load the game from inside the app (origin capacitor://localhost on iPhone,
+  // https://localhost on Android) and call this API across origins. Only these origins get CORS
+  // headers, and only on /api/. No cookies are involved: students send a bearer token.
+  const appOrigins = new Set(
+    (env.APP_ORIGINS ?? 'capacitor://localhost,https://localhost')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+  );
   // Deletes what the schedule says is too old. 0 days turns a rule off.
   async function runRetention(at = clock()) {
     const before = (d) => (d > 0 ? new Date(at - d * DAY_MS) : null);
@@ -591,6 +600,17 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         return send(res, 200, { recoveryCode: code });
       }
 
+      // A student (or their grown-up) deletes their own data from the app. Apple requires this
+      // for apps where people create an account. The nickname must be typed to confirm.
+      if (method === 'DELETE' && path === '/api/me') {
+        const body = await readJson(req);
+        const typed = typeof body.confirm === 'string' ? body.confirm.trim().toLowerCase() : '';
+        if (!typed || typed !== String(student.nickname || '').trim().toLowerCase()) throw new HttpError(400, 'type your nickname to confirm');
+        const n = await store.deleteStudent(student.classCode, student.id);
+        await store.addAudit('student', 'delete_self', { classCode: student.classCode, students: n });
+        return send(res, 200, { deleted: n });
+      }
+
       if (method === 'POST' && path === '/api/progress-link') {
         const key = randomBytes(24).toString('base64url');
         await store.setKey(student.id, 'progress', sha256('progress:' + key));
@@ -690,6 +710,19 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       if (url.pathname === '/healthz') return send(res, 200, { ok: true });
       if (url.pathname.startsWith('/lti/')) return await ltiRoute(req, res, url);
       if (url.pathname.startsWith('/api/')) {
+        const origin = req.headers.origin;
+        if (origin && appOrigins.has(origin)) {
+          res.setHeader('access-control-allow-origin', origin);
+          res.setHeader('vary', 'origin');
+          if (req.method === 'OPTIONS') {
+            res.writeHead(204, {
+              'access-control-allow-methods': 'GET, POST, DELETE',
+              'access-control-allow-headers': 'content-type, authorization, x-tz-offset',
+              'access-control-max-age': '600',
+            });
+            return res.end();
+          }
+        }
         const ip = clientIp(req);
         if (limited(ip, 600)) throw new HttpError(429, 'slow down a little');
         return await api(req, res, url);
