@@ -123,6 +123,10 @@ Not supported yet: Deep Linking (add the tool as a link rather than choosing con
 
 Tested against a simulated Brightspace (`api/test/lti.test.js`: fake keyset, token, roster and grade endpoints). **Run one real launch in a sandbox course before a pilot**, since D2L's exact endpoint values and role names are only visible in your own tenant.
 
+## Phone apps (iPhone and Android)
+
+`mobile/` holds the iPhone and Android apps, built with Capacitor. They carry the student game from `web/` inside the app and talk to this server, so **deploy the server first** (the API now answers the apps' origins, `APP_ORIGINS`, and has `DELETE /api/me` for "Delete my data"). Build steps, store rules and publishing steps are in [mobile/README.md](mobile/README.md).
+
 ## How it teaches
 
 The learning design follows well-established findings: start where the student is, show a worked example before practice, keep success around 70 to 85 percent, give feedback on the actual mistake, space review out over days, and keep sessions short.
@@ -159,6 +163,7 @@ The learning design follows well-established findings: start where the student i
 | `POST /api/placement/skip` | do the check later |
 | `POST /api/progress-link` | make a family link; the old one stops working |
 | `GET /api/progress` with header `x-progress-key` | read-only family summary (60 a minute per IP) |
+| `DELETE /api/me` `{confirm: nickname}` | the student deletes all of their own data ("Delete my data" under For grown-ups); logged without names |
 
 The client sends `x-tz-offset` (minutes behind UTC) so days and streaks follow the student's clock. Recovery and progress keys are stored as SHA-256 hashes in the new `student_keys` table (`api/db/schema.sql`), which the server creates on start. Students saved before this version are upgraded in place the next time they load.
 
@@ -174,6 +179,7 @@ api/db/schema.sql     tables (student state as JSONB for the pilot)
 web/                  student PWA (no build step)
 web/admin/            teacher console
 web/progress/         read-only family progress page
+mobile/               iPhone and Android apps (Capacitor), see mobile/README.md
 scripts/              droplet setup, deploy, backup, restore test
 ```
 

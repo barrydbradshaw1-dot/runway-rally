@@ -2,6 +2,15 @@
 const app = document.getElementById('app');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// In the phone apps the game is loaded from inside the app, so API calls go to the server named
+// in <meta name="rr-api"> (the app build adds it). On the website it is empty: same server.
+const API_BASE = (document.querySelector('meta[name="rr-api"]')?.content || '').replace(/\/+$/, '');
+const PRIVACY_URL = document.querySelector('meta[name="rr-privacy"]')?.content || '';
+const native = Boolean(window.Capacitor?.isNativePlatform?.());
+const plugin = (name) => (native ? window.Capacitor?.Plugins?.[name] : undefined);
+// The phone can clear web storage when space runs low, so the app also keeps the sign-in in Preferences.
+const prefs = plugin('Preferences');
+
 // Inside a Brightspace iframe some browsers block storage, so fall back to memory for that visit.
 const mem = {};
 const store = {
@@ -14,6 +23,7 @@ const store = {
   },
   set(k, v) {
     mem[k] = v;
+    prefs?.set({ key: k, value: v }).catch(() => {});
     try {
       localStorage.setItem(k, v);
     } catch {
@@ -22,6 +32,7 @@ const store = {
   },
   del(k) {
     delete mem[k];
+    prefs?.remove({ key: k }).catch(() => {});
     try {
       localStorage.removeItem(k);
     } catch {
@@ -83,7 +94,9 @@ function show(...nodes) {
 }
 
 async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
+  let res;
+  try {
+    res = await fetch(API_BASE + path, {
     method,
     headers: {
       'content-type': 'application/json',
@@ -91,7 +104,10 @@ async function api(path, { method = 'GET', body } = {}) {
       ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-  });
+    });
+  } catch {
+    throw new Error('Could not reach Runway Rally. Check your internet connection and try again.');
+  }
   let data = {};
   try {
     data = await res.json();
@@ -354,7 +370,7 @@ function grownUps(st) {
     onclick: async () => {
       try {
         const r = await api('/api/progress-link', { method: 'POST' });
-        const url = location.origin + r.path;
+        const url = (API_BASE || location.origin) + r.path;
         const field = h('input', { type: 'text', readonly: true, value: url, 'aria-label': 'Progress link' });
         const copy = navigator.clipboard
           ? h('button', {
@@ -369,10 +385,11 @@ function grownUps(st) {
               },
             })
           : null;
+        const share = plugin('Share');
         linkBox.replaceChildren(
           h('p', { class: 'muted', text: 'Send this link to family. It shows how practice is going and cannot change anything. Making a new link turns the old one off.' }),
           field,
-          copy,
+          share ? h('button', { text: 'Share link', onclick: () => share.share({ title: 'Runway Rally progress', url }).catch(() => {}) }) : copy,
         );
         field.addEventListener('focus', () => field.select());
       } catch (e) {
@@ -404,10 +421,56 @@ function grownUps(st) {
           }),
       h('button', { text: 'Redo the skills check', onclick: () => startPlacement(true) }),
       st.viaLti ? null : h('button', { class: 'ghost', onclick: signOut, text: 'Switch student' }),
+      h('button', { class: 'ghost', text: 'Delete my data', onclick: deleteScreen }),
+      /^https:\/\//.test(PRIVACY_URL) ? h('a', { class: 'muted center', href: PRIVACY_URL, target: '_blank', rel: 'noopener', text: 'Privacy policy' }) : null,
     ),
   );
   out.append(details);
   return out;
+}
+
+// Deleting a student's own data (asked for by Apple, and useful on the website too).
+function deleteScreen() {
+  const nick = h('input', { type: 'text', autocomplete: 'off', 'aria-label': 'Nickname', maxlength: 20 });
+  const msg = h('p', { class: 'error', role: 'alert' });
+  const form = h(
+    'form',
+    {
+      class: 'stack',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        if (state.busy) return;
+        state.busy = true;
+        try {
+          await api('/api/me', { method: 'DELETE', body: { confirm: nick.value } });
+          store.del('rr_token');
+          Object.assign(state, { token: null, student: null, task: null, hint: null, input: '' });
+          show(
+            h('div', { class: 'card stack center' }, h('h2', { text: 'Your data is deleted' }), h('p', { text: 'Your designs, cards and practice history are gone from Runway Rally.' })),
+            h('button', { class: 'primary', text: 'OK', onclick: loginScreen }),
+          );
+        } catch (err) {
+          msg.textContent = err.message;
+        } finally {
+          state.busy = false;
+        }
+      },
+    },
+    h('label', { text: `Type your nickname (${state.student.nickname}) to delete everything` }),
+    nick,
+    msg,
+    h('button', { class: 'danger', type: 'submit', text: 'Delete everything' }),
+  );
+  show(
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Delete my data' }), h('span')),
+    h(
+      'div',
+      { class: 'card stack' },
+      h('p', { text: 'This deletes your designs, cards, skills and practice history for good. Your teacher will no longer see your progress. It cannot be undone.' }),
+      form,
+    ),
+  );
+  nick.focus();
 }
 
 function skillBars(st) {
@@ -738,6 +801,20 @@ function cardsScreen() {
 }
 
 // ---------- boot ----------
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-if (state.token) homeScreen();
-else loginScreen();
+// The website caches itself with a service worker; the phone apps already carry their files.
+if (!native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+(async () => {
+  if (!state.token && prefs) {
+    try {
+      const { value } = await prefs.get({ key: 'rr_token' });
+      if (value) {
+        state.token = value;
+        mem.rr_token = value;
+      }
+    } catch {
+      /* no saved sign-in */
+    }
+  }
+  if (state.token) homeScreen();
+  else loginScreen();
+})();

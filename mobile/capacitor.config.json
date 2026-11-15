@@ -1,0 +1,14 @@
+{
+  "appId": "com.nexusdataengineering.runwayrally",
+  "appName": "Runway Rally",
+  "webDir": "www",
+  "backgroundColor": "#fff4fb",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "never",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}
