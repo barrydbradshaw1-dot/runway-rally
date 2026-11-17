@@ -27,6 +27,7 @@ import {
   applyPlacementAnswer,
   finishPlacement,
   progressSummary,
+  setLook,
 } from './logic.js';
 
 const MIME = {
@@ -598,6 +599,15 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         const code = await issueRecoveryCode(student);
         await store.addEvent(student.id, 'recovery_code_new');
         return send(res, 200, { recoveryCode: code });
+      }
+
+      // "My look": the features and styles the student picked for their designer.
+      if (method === 'POST' && path === '/api/look') {
+        const body = await readJson(req);
+        if (!body.look || typeof body.look !== 'object' || Array.isArray(body.look)) throw new HttpError(400, 'send a look');
+        setLook(student, body.look, { wardrobe: body.wardrobe === true });
+        await store.saveStudent(student);
+        return send(res, 200, { student: pub(student) });
       }
 
       // A student (or their grown-up) deletes their own data from the app. Apple requires this
