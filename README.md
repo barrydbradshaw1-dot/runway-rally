@@ -34,7 +34,7 @@ curl -H "x-admin-token: dev-admin" http://localhost:3000/api/admin/class/MATH-7A
 
 ## Deploy to a DigitalOcean droplet
 
-1. **Point DNS**: an A record for your hostname (for example `rally.example.com`) to the droplet IP.
+1. **Point DNS**: an A record for your hostname (for example `rally.example.com`) to the droplet IP. Add the same for `www.` your hostname if you want it to work too; Caddy redirects it to the main address.
 2. **Harden once, as root**: `bash scripts/setup-droplet.sh` installs Docker, enables the firewall (22, 80, 443), fail2ban, and creates a non-root `rally` user. Open a second terminal and confirm `ssh rally@<ip>` works before closing the root session.
 3. **As `rally`**: clone the repo, `cp .env.example .env`, and fill it in (`DOMAIN`, `ADMIN_TOKEN`, database option A or B).
 4. **Start**: `bash scripts/deploy.sh`. Caddy gets the HTTPS certificate automatically.

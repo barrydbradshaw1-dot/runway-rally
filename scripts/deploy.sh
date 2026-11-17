@@ -12,6 +12,9 @@ if grep -q '^DATABASE_URL=.*@db:' .env; then PROFILE="--profile localdb"; fi
 
 git pull --ff-only 2>/dev/null || echo "(skipped git pull)"
 docker compose $PROFILE up -d --build
+# Caddyfile is mounted, not built in, so load any changes to it (fall back to a restart).
+docker compose $PROFILE exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile \
+  || docker compose $PROFILE restart caddy
 docker compose $PROFILE ps
 echo "Health check:"; sleep 3
 curl -fsS "https://$(grep '^DOMAIN=' .env | cut -d= -f2)/healthz" || echo "not reachable yet (DNS or certificate may still be settling)"

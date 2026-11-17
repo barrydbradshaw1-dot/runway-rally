@@ -6,3 +6,9 @@
 		-Server
 	}
 }
+
+# Anyone who types www. lands on the main address, with the same path.
+# Needs a DNS record for www pointing at the droplet (an A record or a CNAME to the main name).
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
