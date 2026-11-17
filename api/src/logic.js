@@ -20,6 +20,8 @@ import {
   newInterest,
   topInterests,
 } from './adaptive.js';
+// The avatar's look is defined once in the web client and shared here, so both check the same list.
+import { cleanLook } from '../../web/look.js';
 
 export const COMMISSION_LENGTH = 5;
 export const MAX_ATTEMPTS = 2;
@@ -41,6 +43,16 @@ export const ITEMS = [
   { id: 'couture-cape', name: 'Couture Cape', slot: 'outer', skill: 'frac_part', threshold: 0.8 },
   { id: 'crystal-crown', name: 'Crystal Crown', slot: 'jewelry', skill: 'ratio', threshold: 0.8 },
 ];
+
+const ITEM_IDS = ITEMS.map((i) => i.id);
+
+// Saves the student's chosen look (features, hair, style). Only known choices are kept.
+// wardrobe: only an earned item was put on or taken off, so it doesn't count as designing a look.
+export function setLook(student, raw, { wardrobe = false } = {}) {
+  student.look = cleanLook(raw, { itemIds: ITEM_IDS });
+  if (!wardrobe) student.lookSet = true;
+  return student.look;
+}
 
 export const CARDS = [
   { id: 'muse-mira', name: 'Mira, Gala Client', type: 'muse', rarity: 'common' },
@@ -89,6 +101,8 @@ export function normalizeStudent(s) {
   s.daily ??= {};
   s.snapshots ??= {};
   s.streak ??= { count: 0, lastDay: null };
+  s.look = cleanLook(s.look, { itemIds: ITEM_IDS });
+  s.lookSet ??= false;
   return s;
 }
 
@@ -101,6 +115,8 @@ export function publicStudent(s) {
     unlockedSkills: unlockedSkills(s.mastery),
     unlocks: s.unlocks.map((id) => ITEMS.find((i) => i.id === id)).filter(Boolean),
     cards: s.cards,
+    look: s.look,
+    lookSet: s.lookSet,
     stats: s.stats,
     streak: s.streak.count,
     favorites: topInterests(s.interest),

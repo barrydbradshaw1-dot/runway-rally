@@ -1,4 +1,6 @@
 // Runway Rally web client. No build step, no framework, and no innerHTML (text is always set safely).
+import { drawAvatar } from './avatar.js';
+import { CHOICES, DETAILS, DEFAULT_LOOK, STYLES, HAIR_STYLES, cleanLook, pick } from './look.js';
 const app = document.getElementById('app');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -132,44 +134,10 @@ function signOut() {
 
 const has = (id) => state.student.unlocks.some((i) => i.id === id);
 
-// ---------- avatar (placeholder art: layered SVG that shows earned items) ----------
+// ---------- avatar: the student's chosen look, with earned items layered on top ----------
+const ownedIds = () => state.student.unlocks.map((i) => i.id);
 function avatar() {
-  const L = [];
-  L.push(s('ellipse', { cx: 100, cy: 92, rx: 56, ry: 62, fill: '#7a4dff' })); // back hair
-  if (has('couture-cape')) L.push(s('path', { d: 'M52 130 Q100 118 148 130 L168 250 L32 250 Z', fill: '#4b2fb8' }));
-  L.push(s('rect', { x: 88, y: 128, width: 24, height: 22, rx: 8, fill: '#ffd9c2' })); // neck
-  // legs
-  L.push(s('rect', { x: 82, y: 215, width: 14, height: 50, rx: 6, fill: '#ffd9c2' }));
-  L.push(s('rect', { x: 104, y: 215, width: 14, height: 50, rx: 6, fill: '#ffd9c2' }));
-  L.push(s('ellipse', { cx: 89, cy: 268, rx: 13, ry: 7, fill: '#ff7ac6' }));
-  L.push(s('ellipse', { cx: 111, cy: 268, rx: 13, ry: 7, fill: '#ff7ac6' }));
-  if (has('gala-gown')) {
-    L.push(s('path', { d: 'M76 148 L124 148 L156 262 L44 262 Z', fill: '#ff7ac6' }));
-    L.push(s('path', { d: 'M76 148 L124 148 L128 170 L72 170 Z', fill: '#ff9fd8' }));
-  } else {
-    L.push(s('rect', { x: 72, y: 146, width: 56, height: 74, rx: 14, fill: has('basic-tee') ? '#ffffff' : '#ffd9c2' })); // tee
-    L.push(s('rect', { x: 78, y: 210, width: 44, height: 14, rx: 6, fill: '#5a77ff' })); // shorts
-  }
-  if (has('fraction-jacket')) {
-    L.push(s('path', { d: 'M66 146 L90 146 L90 214 L70 214 Z', fill: '#2fc9a2' }));
-    L.push(s('path', { d: 'M110 146 L134 146 L130 214 L110 214 Z', fill: '#2fc9a2' }));
-  }
-  if (has('sale-scarf')) L.push(s('path', { d: 'M82 144 Q100 160 118 144 L122 156 Q100 174 78 156 Z', fill: '#ffb830' }));
-  if (has('ratio-pearls')) for (let i = 0; i < 7; i++) L.push(s('circle', { cx: 80 + i * 6.7, cy: 154 + Math.sin((i / 6) * Math.PI) * 10, r: 3.4, fill: '#fff', stroke: '#d8d0f5' }));
-  L.push(s('circle', { cx: 100, cy: 92, r: 50, fill: '#ffe6d6' })); // head
-  // front hair
-  L.push(s('path', { d: 'M50 88 Q60 34 100 36 Q142 34 150 88 Q128 62 100 64 Q72 62 50 88 Z', fill: '#7a4dff' }));
-  // anime eyes
-  for (const x of [80, 120]) {
-    L.push(s('ellipse', { cx: x, cy: 98, rx: 10, ry: 13, fill: '#2b2250' }));
-    L.push(s('circle', { cx: x + 3, cy: 93, r: 4, fill: '#fff' }));
-    L.push(s('circle', { cx: x - 3, cy: 103, r: 2, fill: '#fff' }));
-  }
-  L.push(s('ellipse', { cx: 68, cy: 116, rx: 8, ry: 5, fill: '#ff9fc4', opacity: 0.7 }));
-  L.push(s('ellipse', { cx: 132, cy: 116, rx: 8, ry: 5, fill: '#ff9fc4', opacity: 0.7 }));
-  L.push(s('path', { d: 'M92 122 Q100 129 108 122', fill: 'none', stroke: '#c0446f', 'stroke-width': 3, 'stroke-linecap': 'round' }));
-  if (has('crystal-crown')) L.push(s('path', { d: 'M70 52 L80 30 L92 48 L100 24 L108 48 L120 30 L130 52 Z', fill: '#9ae7ff', stroke: '#4aa8ff', 'stroke-width': 2 }));
-  return s('svg', { class: 'avatar', viewBox: '0 0 200 280', role: 'img', 'aria-label': 'Your designer wearing the items you have earned' }, L);
+  return drawAvatar(state.student.look, ownedIds());
 }
 
 // ---------- screens ----------
@@ -342,6 +310,15 @@ async function homeScreen() {
       h('div', { class: 'row' }, st.streak > 0 ? h('div', { class: 'pill streak', title: 'Days in a row', text: `🔥 ${st.streak}` }) : null, h('div', { class: 'pill thread', text: `🧵 ${st.thread}` })),
     ),
     checkCard,
+    !checkCard && !st.lookSet
+      ? h(
+          'div',
+          { class: 'card stack callout' },
+          h('h3', { text: 'Make your designer yours' }),
+          h('p', { text: 'Pick a skin tone, face, eyes, hair and style. Change it anytime.' }),
+          h('button', { class: 'primary', text: 'Design my look', onclick: () => lookScreen() }),
+        )
+      : null,
     h('div', { class: 'card avatar-wrap pop' }, avatar()),
     st.commission ? h('button', { class: 'primary', onclick: () => start(null), text: `Continue commission (${st.commission.done}/${st.commission.total})` }) : null,
     h('h2', { text: 'Start a commission' }),
@@ -355,6 +332,7 @@ async function homeScreen() {
       tile('🎲', 'Surprise me', () => start(null)),
       tile('👗', 'Wardrobe', () => open('wardrobe', wardrobeScreen)),
       tile('🃏', 'Cards', () => open('cards', cardsScreen)),
+      tile('🪞', 'My look', () => lookScreen(), 'wide'),
     ),
     h('div', { class: 'card stack' }, h('h3', { text: 'Your skills' }), skillBars(st)),
     grownUps(st),
@@ -777,15 +755,252 @@ function wrapScreen(d) {
   );
 }
 
+// ---------- My look ----------
+// Students pick their designer's features and styles directly. Nothing asks for or stores race or
+// ethnicity, and no camera or photo is used. Each choice is a native radio button or checkbox, so
+// arrow keys, Tab and screen readers work without extra code.
+const LOOK_TABS = [
+  { id: 'skin', label: 'Skin' },
+  { id: 'face', label: 'Face' },
+  { id: 'eyes', label: 'Eyes' },
+  { id: 'hair', label: 'Hair' },
+  { id: 'head', label: 'Head' },
+  { id: 'style', label: 'Style' },
+  { id: 'extras', label: 'Extras' },
+];
+
+function lookScreen({ tab = 'skin' } = {}) {
+  const draft = cleanLook(state.student.look);
+  const owned = ownedIds();
+  let active = tab;
+  let dirty = false;
+  const preview = h('div', { class: 'card avatar-wrap look-preview' });
+  const panel = h('div', { class: 'look-panel stack', role: 'tabpanel', id: 'look-panel', tabindex: '-1' });
+  const msg = h('p', { class: 'error', role: 'alert' });
+  const paint = () => preview.replaceChildren(drawAvatar(draft, owned));
+
+  const swatchColor = (field, item) => {
+    if (field === 'skin') return item.base;
+    if (field === 'lipColor' && (!item.hex || item.hex === 'gloss')) return pick('skin', draft.skin).lip;
+    return item.hex;
+  };
+
+  // One set of choices. Pictures show the student's own designer with that choice applied.
+  const group = (field, legend, { swatch = false, view = 'head', items = CHOICES[field], over = {}, note, era = false } = {}) => {
+    const opts = items.map((item) => {
+      const input = h('input', { type: 'radio', name: `look-${field}`, value: item.id, class: 'sr-only' });
+      input.checked = draft[field] === item.id;
+      input.addEventListener('change', () => input.checked && choose(field, item.id));
+      let pic;
+      if (swatch) {
+        pic = h('span', { class: `swatch${item.hex === 'gloss' ? ' gloss' : ''}`, 'aria-hidden': 'true' });
+        pic.style.background = swatchColor(field, item);
+      } else {
+        pic = drawAvatar({ ...draft, ...over, [field]: item.id }, owned, { view, hideHair: over.hideHair, label: '' });
+      }
+      const name = era ? `${item.name} (${item.era === 'traditional' ? 'traditional' : 'modern take'})` : item.name;
+      return h(
+        'label',
+        { class: `opt${swatch ? ' sw' : ''}${input.checked ? ' on' : ''}`, title: swatch ? item.name : null },
+        input,
+        pic,
+        h('span', { class: swatch ? 'sr-only' : 'opt-name', text: name }),
+        era ? h('span', { class: 'era', 'aria-hidden': 'true', text: item.era === 'traditional' ? 'Traditional' : 'Modern' }) : null,
+      );
+    });
+    return h(
+      'fieldset',
+      { class: 'look-group' },
+      h('legend', {}, legend, swatch ? h('span', { class: 'muted small picked', text: ` · ${pick(field, draft[field]).name}` }) : null),
+      note ? h('p', { class: 'muted small', text: note }) : null,
+      h('div', { class: swatch ? 'opts swatches' : 'opts thumbs' }, opts),
+    );
+  };
+
+  const checks = (legend, items, field) =>
+    h(
+      'fieldset',
+      { class: 'look-group' },
+      h('legend', { text: legend }),
+      h(
+        'div',
+        { class: 'checks' },
+        items.map((item) => {
+          const input = h('input', { type: 'checkbox', name: `look-${field}`, value: item.id });
+          input.checked = draft[field].includes(item.id);
+          input.addEventListener('change', () => {
+            const set = new Set(draft[field]);
+            if (input.checked) set.add(item.id);
+            else set.delete(item.id);
+            choose(field, [...set], item.id);
+          });
+          return h('label', { class: 'check' }, input, h('span', { text: item.name }));
+        }),
+      ),
+    );
+
+  const panels = {
+    skin: () => [group('skin', 'Skin tone', { swatch: true, note: 'Pick any tone. You can change it anytime.' })],
+    face: () => [
+      group('face', 'Face shape', { view: 'head', over: { hideHair: true, headwear: 'none' } }),
+      group('brows', 'Brows', { view: 'eyes' }),
+      group('nose', 'Nose', { view: 'nose' }),
+      group('lips', 'Lips', { view: 'mouth' }),
+      group('lipColor', 'Lip color', { swatch: true }),
+    ],
+    eyes: () => [group('eyes', 'Eye shape', { view: 'eyes' }), group('eyeColor', 'Eye color', { swatch: true })],
+    hair: () => {
+      const hidden = pick('headwear', draft.headwear).covers === 'all';
+      const textures = [...new Set(HAIR_STYLES.map((x) => x.texture))];
+      return [
+        hidden ? h('p', { class: 'callout card', text: 'Your head covering hides your hair. You can still pick a style here, or change the covering under Head.' }) : null,
+        group('hairColor', 'Hair color', { swatch: true }),
+        ...textures.map((t) => group('hair', t, { items: HAIR_STYLES.filter((x) => x.texture === t), over: { headwear: 'none' } })),
+      ];
+    },
+    head: () => [group('headwear', 'Head covering', { view: 'head' }), group('headColor', 'Fabric color', { swatch: true })],
+    style: () => {
+      const families = [...new Set(STYLES.map((x) => x.family))];
+      return [
+        group('styleColor', 'Fabric color', { swatch: true }),
+        h('p', { class: 'muted small', text: 'Classic clothes from around the world, each in a traditional form and a modern take. Wear anything you like.' }),
+        ...families.map((f) => {
+          const items = STYLES.filter((x) => x.family === f);
+          const where = items[0].origin === 'Everyday' ? 'Everyday' : `${f} · ${items[0].origin}`;
+          return group('style', where, { items, view: 'full', era: f !== 'Everyday' });
+        }),
+      ];
+    },
+    extras: () => [checks('Details', DETAILS, 'details'), group('glasses', 'Glasses', { view: 'face' }), group('earrings', 'Earrings', { view: 'head', over: { headwear: 'none' } })],
+  };
+
+  const tabButtons = LOOK_TABS.map((t) =>
+    h('button', {
+      role: 'tab',
+      id: `look-tab-${t.id}`,
+      'aria-controls': 'look-panel',
+      class: 'look-tab',
+      text: t.label,
+      onclick: () => openTab(t.id),
+    }),
+  );
+  const tabs = h('div', { class: 'look-tabs', role: 'tablist', 'aria-label': 'Parts of your look' }, tabButtons);
+  tabs.addEventListener('keydown', (e) => {
+    const i = LOOK_TABS.findIndex((t) => t.id === active);
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: LOOK_TABS.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const n = (next + LOOK_TABS.length) % LOOK_TABS.length;
+    openTab(LOOK_TABS[n].id);
+    tabButtons[n].focus();
+  });
+
+  function render(focus) {
+    tabButtons.forEach((b, i) => {
+      const on = LOOK_TABS[i].id === active;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    panel.setAttribute('aria-labelledby', `look-tab-${active}`);
+    panel.replaceChildren(...panels[active]().filter(Boolean));
+    if (focus) panel.querySelector(`input[name="look-${focus.field}"][value="${focus.value}"]`)?.focus();
+  }
+  function openTab(id) {
+    active = id;
+    render();
+  }
+  // Pictures show the student's own designer, so a new pick redraws them; focus stays put.
+  function choose(field, value, focusValue = value) {
+    draft[field] = value;
+    dirty = true;
+    msg.textContent = '';
+    paint();
+    render({ field, value: focusValue });
+  }
+
+  const save = h('button', {
+    class: 'primary grow',
+    text: 'Save my look',
+    onclick: async () => {
+      if (state.busy) return;
+      state.busy = true;
+      save.disabled = true;
+      try {
+        const r = await api('/api/look', { method: 'POST', body: { look: draft } });
+        state.student = r.student;
+        dirty = false;
+        homeScreen();
+      } catch (e) {
+        msg.textContent = e.message;
+      } finally {
+        state.busy = false;
+        save.disabled = false;
+      }
+    },
+  });
+  const leave = () => {
+    if (dirty && !confirm('Leave without saving your new look?')) return;
+    homeScreen();
+  };
+  const reset = h('button', {
+    class: 'ghost',
+    text: 'Start over',
+    onclick: () => {
+      Object.assign(draft, cleanLook({ ...DEFAULT_LOOK, off: draft.off }));
+      dirty = true;
+      paint();
+      render();
+    },
+  });
+
+  show(
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: leave }), h('h2', { text: 'My look' }), h('span')),
+    h('p', { class: 'muted center', text: 'Design your designer. Pick any features and styles you like.' }),
+    preview,
+    tabs,
+    panel,
+    msg,
+    h('div', { class: 'row look-actions' }, reset, save),
+  );
+  paint();
+  render();
+}
+
+// Taking an earned item off (or putting it back on) saves right away.
+async function setWorn(id, wear, box) {
+  const look = cleanLook(state.student.look);
+  const off = new Set(look.off);
+  if (wear) off.delete(id);
+  else off.add(id);
+  try {
+    const r = await api('/api/look', { method: 'POST', body: { look: { ...look, off: [...off] }, wardrobe: true } });
+    state.student = r.student;
+    wardrobeScreen();
+  } catch (e) {
+    box.checked = !wear;
+    alert(e.message);
+  }
+}
+
 function wardrobeScreen() {
   const items = state.catalog.items;
   const names = state.catalog.skills;
+  const off = new Set(state.student.look?.off || []);
   show(
     h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Wardrobe' }), h('span')),
     h('div', { class: 'card avatar-wrap' }, avatar()),
+    h('button', { class: 'primary', text: '🪞 Change my look', onclick: () => lookScreen() }),
+    h('p', { class: 'muted small', text: 'Items you earn go on top of your look. Untick one to take it off.' }),
     h('div', { class: 'items' }, items.map((i) => {
       const owned = has(i.id);
-      return h('div', { class: `item ${owned ? '' : 'locked'}` }, h('strong', { text: i.name }), h('span', { class: 'muted', text: owned ? 'Owned' : `Reach ${Math.round(i.threshold * 100)}% in ${names[i.skill]}` }));
+      let wear = null;
+      if (owned) {
+        const box = h('input', { type: 'checkbox' });
+        box.checked = !off.has(i.id);
+        box.addEventListener('change', () => setWorn(i.id, box.checked, box));
+        wear = h('label', { class: 'check' }, box, h('span', { text: 'Wearing' }));
+      }
+      return h('div', { class: `item ${owned ? '' : 'locked'}` }, h('strong', { text: i.name }), owned ? wear : h('span', { class: 'muted', text: `Reach ${Math.round(i.threshold * 100)}% in ${names[i.skill]}` }));
     })),
   );
 }
