@@ -224,3 +224,12 @@ button.danger { background: var(--danger); color: #fff; }
 .look-actions { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--bg2) 30%); padding-top: 12px; }
 .picked { font-weight: 600; }
 .item .check { padding: 0; background: none; min-height: 0; }
+
+/* privacy policy page */
+.policy { max-width: 760px; margin: 16px auto; display: flex; flex-direction: column; gap: 12px; line-height: 1.5; }
+.policy h2 { margin-top: 10px; font-size: 1.15rem; }
+.policy ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+.policy a { color: var(--violet); }
+.policy mark { background: #fff1c2; border-radius: 4px; padding: 0 3px; }
+.join-note { font-size: 0.88rem; }
+.join-note a { color: var(--violet); }

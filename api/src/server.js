@@ -5,6 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeStore } from './store.js';
+import { checkNickname, extraBlocklist } from './nickname.js';
 import { mulberry32, THEMES, SKILLS, SKILL_IDS } from './skills.js';
 import { recordInterest } from './adaptive.js';
 import { loadLtiConfig } from './lti/config.js';
@@ -96,15 +97,14 @@ export function retentionConfig(env = process.env) {
   };
 }
 
-// Placeholder nickname filter. Replace with a real moderation list before any pilot with students.
-const BLOCKLIST = [];
-export function cleanNickname(raw) {
-  if (typeof raw !== 'string') return null;
-  const n = raw.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 20);
-  if (n.length < 2) return null;
-  if (BLOCKLIST.some((w) => n.toLowerCase().includes(w))) return null;
-  return n;
+// Nickname filter and real-name check: see nickname.js.
+export function cleanNickname(raw, env = process.env) {
+  return checkNickname(raw, { extra: extraBlocklist(env) }).nickname ?? null;
 }
+
+// The privacy policy a teacher agrees to when making a class. Change it when the policy changes,
+// so the console can ask teachers to look again.
+export const POLICY_VERSION = '2026-11-18';
 
 export function cleanClassCode(raw) {
   if (typeof raw !== 'string') return null;
@@ -135,6 +135,15 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return Number.isInteger(n) && Math.abs(n) <= 840 ? n : 0;
   };
   const retention = retentionConfig(env);
+  const nicknameExtra = extraBlocklist(env);
+  const nicknameOf = (raw) => {
+    const r = checkNickname(raw, { extra: nicknameExtra });
+    if (r.error) throw new HttpError(400, r.error);
+    return r.nickname;
+  };
+  // A teacher (or the owner) confirms, for each class, that their school has approved Runway Rally
+  // and that they have read the privacy policy. This is the school's consent for students under 13.
+  const authorization = (who) => ({ at: new Date(clock()).toISOString(), by: actorOf(who), policy: POLICY_VERSION });
   // The phone apps load the game from inside the app (origin capacitor://localhost on iPhone,
   // https://localhost on Android) and call this API across origins. Only these origins get CORS
   // headers, and only on /api/. No cookies are involved: students send a bearer token.
@@ -268,7 +277,18 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return Boolean(c && c.teacherId === who.teacherId);
   }
   const actorOf = (who) => (who.role === 'teacher' ? `teacher:${who.teacherId}` : who.role === 'lti' ? `lti:${who.classCode}` : 'owner');
-  const classOut = (c) => ({ code: c.code, name: c.name || c.contextTitle || null, kind: c.kind || (c.code.startsWith('LTI-') ? 'lti' : 'manual'), teacherId: c.teacherId || null, endsOn: c.endsOn || null, createdAt: c.createdAt || null, students: c.students ?? null });
+  const classOut = (c) => ({
+    code: c.code,
+    name: c.name || c.contextTitle || null,
+    kind: c.kind || (c.code.startsWith('LTI-') ? 'lti' : 'manual'),
+    teacherId: c.teacherId || null,
+    endsOn: c.endsOn || null,
+    joinOpen: c.joinOpen !== false,
+    authorizedAt: c.authorization?.at || null,
+    authorizedPolicy: c.authorization?.policy || null,
+    createdAt: c.createdAt || null,
+    students: c.students ?? null,
+  });
 
   async function taskFor(student) {
     if (!student.commission || !student.currentTaskId) return null;
@@ -284,14 +304,14 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     if (method === 'POST' && path === '/api/session') {
       const body = await readJson(req);
       const classCode = cleanClassCode(body.classCode);
-      const nickname = cleanNickname(body.nickname);
       if (!classCode) throw new HttpError(400, 'enter the class code from your teacher');
-      if (!nickname) throw new HttpError(400, 'pick a nickname (2 to 20 letters or numbers)');
+      const nickname = nicknameOf(body.nickname);
       // only classes a teacher created can be joined, and wrong guesses are limited
       if (limited('join:' + clientIp(req), 20)) throw new HttpError(429, 'too many tries, wait a minute');
       const cls = await store.getClass(classCode);
       if (!cls || cls.kind !== 'manual') throw new HttpError(404, 'that class code did not match a class. Check it with your teacher');
       if (cls.endsOn && cls.endsOn < isoDay(clock())) throw new HttpError(403, 'that class has ended');
+      if (cls.joinOpen === false) throw new HttpError(403, 'that class is not taking new students. Ask your teacher');
       const token = randomBytes(24).toString('base64url');
       const student = newStudent({ id: randomUUID(), classCode, nickname });
       await store.createStudent(student, sha256(token));
@@ -333,6 +353,27 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       const code = cleanClassCode(decodeURIComponent(rest[0]));
       if (!code) throw new HttpError(400, 'bad class code');
       if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+      // Everything kept about one student, for a school's or family's request to see it (FERPA).
+      if (rest.length === 4 && rest[1] === 'student' && UUID.test(rest[2]) && rest[3] === 'export') {
+        const s = await store.getStudent(rest[2]);
+        if (!s || s.classCode !== code) throw new HttpError(404, 'that student is not in this class');
+        const [tasks, events] = await Promise.all([store.listTasks(s.id), store.listEvents(s.id)]);
+        await store.addAudit(actorOf(who), 'export_student', { classCode: code, students: 1 });
+        const day = isoDay(clock());
+        return send(
+          res,
+          200,
+          {
+            about: 'Everything Runway Rally keeps about this student. Sign-in tokens, the recovery code and the family link are stored only as one-way hashes, so they are not included.',
+            exportedAt: new Date(clock()).toISOString(),
+            classCode: code,
+            student: s,
+            problems: tasks,
+            activity: events,
+          },
+          { 'content-disposition': `attachment; filename="runway-rally-${code}-${String(s.nickname || 'student').replace(/[^A-Za-z0-9_-]/g, '_')}-${day}.json"` },
+        );
+      }
       if (rest.length !== 1) throw new HttpError(404, 'not found');
       const list = await store.listClass(code);
       const cls = await store.getClass(code);
@@ -340,6 +381,10 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         classCode: code,
         title: cls?.contextTitle || cls?.name || null,
         endsOn: cls?.endsOn || null,
+        joinOpen: cls ? cls.joinOpen !== false : false,
+        authorizedAt: cls?.authorization?.at || null,
+        authorizedPolicy: cls?.authorization?.policy || null,
+        policyVersion: POLICY_VERSION,
         kind: cls ? classOut(cls).kind : 'unregistered',
         skills: CATALOG.skills,
         skillInfo: CATALOG.skillInfo,
@@ -374,13 +419,35 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     if (method === 'PATCH' && path.startsWith('/api/admin/class/')) {
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
       const who = await requireTeacher(req);
-      const code = cleanClassCode(decodeURIComponent(path.slice('/api/admin/class/'.length)));
+      const rest = path.slice('/api/admin/class/'.length).split('/');
+      const code = cleanClassCode(decodeURIComponent(rest[0]));
       if (!code) throw new HttpError(400, 'bad class code');
       if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+      // a teacher renames a student whose nickname is unkind or is a real name
+      if (rest.length === 3 && rest[1] === 'student' && UUID.test(rest[2])) {
+        const body = await readJson(req);
+        const nickname = nicknameOf(body.nickname);
+        const done = await withLock(rest[2], async () => {
+          const s = await store.getStudent(rest[2]);
+          if (!s || s.classCode !== code) return false;
+          s.nickname = nickname;
+          await store.saveStudent(s);
+          return true;
+        });
+        if (!done) throw new HttpError(404, 'that student is not in this class');
+        await store.addAudit(actorOf(who), 'rename_student', { classCode: code, students: 1 });
+        return send(res, 200, { nickname });
+      }
+      if (rest.length !== 1) throw new HttpError(404, 'not found');
       const cls = await store.getClass(code);
       if (!cls) throw new HttpError(404, 'class not found');
       const body = await readJson(req);
       const patch = {};
+      if (body.joinOpen !== undefined) {
+        if (typeof body.joinOpen !== 'boolean') throw new HttpError(400, 'joinOpen should be true or false');
+        patch.joinOpen = body.joinOpen;
+      }
+      if (body.agree === true) patch.authorization = authorization(who);
       if (body.name !== undefined) patch.name = cleanName(body.name) || cls.name;
       if (body.endsOn !== undefined) {
         if (body.endsOn !== null && !cleanDay(body.endsOn)) throw new HttpError(400, 'the end date should look like 2027-06-01');
@@ -393,9 +460,10 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     if (method === 'GET' && path === '/api/admin/me') {
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
       const who = await requireTeacher(req);
-      if (who.role === 'owner') return send(res, 200, { kind: 'owner', retention });
-      if (who.role === 'teacher') return send(res, 200, { kind: 'teacher', name: who.name, retention });
-      return send(res, 200, { kind: 'lti', classCode: who.classCode, title: who.title, retention });
+      const common = { retention, policyVersion: POLICY_VERSION };
+      if (who.role === 'owner') return send(res, 200, { kind: 'owner', ...common });
+      if (who.role === 'teacher') return send(res, 200, { kind: 'teacher', name: who.name, ...common });
+      return send(res, 200, { kind: 'lti', classCode: who.classCode, title: who.title, ...common });
     }
 
     // ----- classes: a teacher creates a class and gets a code that cannot be guessed -----
@@ -415,6 +483,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         const body = await readJson(req);
         const name = cleanName(body.name);
         if (!name) throw new HttpError(400, 'give the class a name, like Period 3 Math');
+        if (body.agree !== true) throw new HttpError(400, 'tick the box to confirm your school has approved Runway Rally and you have read the privacy policy');
         const endsOn = body.endsOn ? cleanDay(body.endsOn) : null;
         if (body.endsOn && !endsOn) throw new HttpError(400, 'the end date should look like 2027-06-01');
         let teacherId = who.role === 'teacher' ? who.teacherId : null;
@@ -422,7 +491,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           if (!UUID.test(body.teacherId)) throw new HttpError(400, 'unknown teacher');
           teacherId = body.teacherId;
         }
-        const data = { kind: 'manual', name, endsOn, createdAt: new Date(clock()).toISOString(), ...(teacherId ? { teacherId } : {}) };
+        const data = { kind: 'manual', name, endsOn, joinOpen: true, authorization: authorization(who), createdAt: new Date(clock()).toISOString(), ...(teacherId ? { teacherId } : {}) };
         // the owner may register a code students already use (classes made before teacher logins)
         if (who.role === 'owner' && body.code) {
           const code = cleanClassCode(body.code);

@@ -2,10 +2,20 @@
 #
 # Bundled database:   docker compose --profile localdb up -d --build
 # Managed database:   set DATABASE_URL (and PGSSLMODE=require) in .env, then: docker compose up -d --build
+
+# Container logs are rotated: at most 5 files of 10 MB per service, so they never fill the disk
+# and old error lines do not pile up.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    logging: *logging
     ports:
       - "80:80"
       - "443:443"
@@ -23,6 +33,7 @@ services:
       context: .
       dockerfile: api/Dockerfile
     restart: unless-stopped
+    logging: *logging
     env_file: .env
     environment:
       NODE_ENV: production
@@ -35,6 +46,7 @@ services:
     profiles: ["localdb"]
     image: postgres:16
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: rally
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-unused}
