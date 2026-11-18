@@ -1,6 +1,7 @@
 // Runway Rally web client. No build step, no framework, and no innerHTML (text is always set safely).
 import { drawAvatar } from './avatar.js';
 import { CHOICES, DETAILS, DEFAULT_LOOK, STYLES, HAIR_STYLES, cleanLook, pick } from './look.js';
+import { SLOTS, SKILL_ITEMS, REWARD_ITEMS, itemById, colorHex, colorName } from './items.js';
 const app = document.getElementById('app');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -132,7 +133,6 @@ function signOut() {
   loginScreen();
 }
 
-const has = (id) => state.student.unlocks.some((i) => i.id === id);
 
 // ---------- avatar: the student's chosen look, with earned items layered on top ----------
 const ownedIds = () => state.student.unlocks.map((i) => i.id);
@@ -330,9 +330,8 @@ async function homeScreen() {
       tile('✂️', 'Pattern Table', () => start('fabric')),
       tile('✨', 'Runway', () => start('runway')),
       tile('🎲', 'Surprise me', () => start(null)),
-      tile('👗', 'Wardrobe', () => open('wardrobe', wardrobeScreen)),
-      tile('🃏', 'Cards', () => open('cards', cardsScreen)),
-      tile('🪞', 'My look', () => lookScreen(), 'wide'),
+      tile('👗', 'Wardrobe', () => open('wardrobe', () => wardrobeScreen())),
+      tile('🪞', 'My look', () => lookScreen()),
     ),
     h('div', { class: 'card stack' }, h('h3', { text: 'Your skills' }), skillBars(st)),
     grownUps(st),
@@ -424,7 +423,7 @@ function deleteScreen() {
           store.del('rr_token');
           Object.assign(state, { token: null, student: null, task: null, hint: null, input: '' });
           show(
-            h('div', { class: 'card stack center' }, h('h2', { text: 'Your data is deleted' }), h('p', { text: 'Your designs, cards and practice history are gone from Runway Rally.' })),
+            h('div', { class: 'card stack center' }, h('h2', { text: 'Your data is deleted' }), h('p', { text: 'Your designs, wardrobe and practice history are gone from Runway Rally.' })),
             h('button', { class: 'primary', text: 'OK', onclick: loginScreen }),
           );
         } catch (err) {
@@ -444,7 +443,7 @@ function deleteScreen() {
     h(
       'div',
       { class: 'card stack' },
-      h('p', { text: 'This deletes your designs, cards, skills and practice history for good. Your teacher will no longer see your progress. It cannot be undone.' }),
+      h('p', { text: 'This deletes your designs, wardrobe, skills and practice history for good. Your teacher will no longer see your progress. It cannot be undone.' }),
       form,
     ),
   );
@@ -701,13 +700,13 @@ function resultScreen(r) {
   if (r.unlocked.length) nodes.push(h('div', { class: 'card avatar-wrap' }, avatar()));
   const next = h('button', {
     class: 'primary',
-    text: r.commissionComplete ? (r.pack ? 'Open your pack' : 'See how you did') : 'Next',
+    text: r.commissionComplete ? (r.reward ? 'See your new piece' : 'See how you did') : 'Next',
     onclick: () => {
       state.busy = false;
       state.hint = null;
       state.input = '';
       state.story = '';
-      if (r.commissionComplete) packScreen(r);
+      if (r.commissionComplete) rewardScreen(r);
       else {
         state.task = r.next;
         if (r.next.example) exampleScreen();
@@ -720,25 +719,65 @@ function resultScreen(r) {
   next.focus();
 }
 
-function packScreen(r) {
+// A good commission earns the next piece, already on the designer. One tap takes it off again
+// (and puts back whatever was in that spot before).
+function rewardScreen(r) {
   const after = () => (r.sessionDone ? wrapScreen(r.sessionDone) : homeScreen());
   const score = r.score ? h('p', { class: 'muted', text: `${r.score.correct} of ${r.score.total} right` }) : null;
-  if (!r.pack) {
-    show(
-      h('div', { class: 'center stack' }, h('h2', { text: 'Commission complete' }), score),
-      h('div', { class: 'card stack center pop' }, h('p', { class: 'reward', text: `+${r.effortThread} Thread for sticking with it` }), h('p', { text: r.packHint })),
-      r.repaired ? h('p', { class: 'muted center', text: 'You worked on a building-block skill. That makes the next one easier.' }) : null,
-      h('button', { class: 'primary', text: r.sessionDone ? 'Next' : 'Back to studio', onclick: after }),
-    );
+  const done = h('button', { class: 'primary', text: r.sessionDone ? 'Next' : 'Back to studio', onclick: after });
+  const header = h('div', { class: 'center stack' }, h('h2', { text: r.reward ? 'Commission complete!' : 'Commission complete' }), score, r.bonusThread ? h('p', { class: 'reward', text: `Bonus: +${r.bonusThread} Thread for great work` }) : null);
+  if (!r.reward) {
+    const body = r.allCollected
+      ? [h('p', { class: 'reward', text: `+${r.allCollected} Thread` }), h('p', { text: 'You have every piece in every colour. Amazing work!' })]
+      : [h('p', { class: 'reward', text: `+${r.effortThread} Thread for sticking with it` }), h('p', { text: r.rewardHint })];
+    show(header, h('div', { class: 'card stack center pop' }, body), r.repaired ? h('p', { class: 'muted center', text: 'You worked on a building-block skill. That makes the next one easier.' }) : null, done);
+    done.focus();
     return;
   }
-  const c = r.pack.card;
+  const { item, replaced } = r.reward;
+  const where = SLOTS.find((x) => x.id === item.slot)?.name.toLowerCase() || 'wardrobe';
+  let wearing = true;
+  const pic = h('div', { class: 'card avatar-wrap' }, avatar());
+  const note = h('p', { class: 'muted small center', 'aria-live': 'polite' });
+  const toggle = h('button', { class: 'ghost' });
+  const label = () => {
+    toggle.textContent = wearing ? 'Take it off' : 'Put it on';
+    note.textContent = wearing
+      ? replaced
+        ? `It took the place of your ${replaced.name}, which is still in your wardrobe.`
+        : `It's on your designer now. Find it anytime in your wardrobe under ${where}.`
+      : replaced
+        ? `Your ${replaced.name} is back on. ${item.name} is in your wardrobe.`
+        : `${item.name} is in your wardrobe.`;
+  };
+  toggle.addEventListener('click', async () => {
+    if (state.busy) return;
+    state.busy = true;
+    const look = cleanLook(state.student.look);
+    const wear = look.wear.filter((w) => itemById(w)?.slot !== item.slot);
+    if (!wearing) wear.push(item.id);
+    else if (replaced) wear.push(replaced.id);
+    try {
+      await saveWear(wear);
+      wearing = !wearing;
+      pic.replaceChildren(avatar());
+      label();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      state.busy = false;
+    }
+  });
+  label();
   show(
-    h('div', { class: 'center stack' }, h('h2', { text: 'Commission complete!' }), score, r.bonusThread ? h('p', { class: 'reward', text: `Bonus: +${r.bonusThread} Thread for great work` }) : null),
-    h('div', { class: `tcard ${c.rarity} pop` }, h('span', { class: 'rarity', text: `${c.rarity} · ${c.type}` }), h('strong', { text: c.name }), r.pack.duplicate ? h('span', { class: 'muted', text: `Duplicate: +${r.pack.threadFromDuplicate} Thread instead` }) : h('span', { text: 'New card!' })),
+    header,
+    h('div', { class: 'card stack center pop new-piece' }, h('span', { class: 'badge', text: 'New piece' }), h('h3', { text: item.name })),
+    pic,
+    note,
+    h('div', { class: 'row' }, toggle, done),
     r.repaired ? h('p', { class: 'muted center', text: 'You strengthened a building-block skill. Nice.' }) : null,
-    h('button', { class: 'primary', text: r.sessionDone ? 'Next' : 'Back to studio', onclick: after }),
   );
+  done.focus();
 }
 
 // Shown once a day after a solid session: a natural place to stop.
@@ -946,7 +985,7 @@ function lookScreen({ tab = 'skin' } = {}) {
     class: 'ghost',
     text: 'Start over',
     onclick: () => {
-      Object.assign(draft, cleanLook({ ...DEFAULT_LOOK, off: draft.off }));
+      Object.assign(draft, cleanLook({ ...DEFAULT_LOOK, wear: draft.wear })); // keeps the pieces she has on
       dirty = true;
       paint();
       render();
@@ -966,53 +1005,106 @@ function lookScreen({ tab = 'skin' } = {}) {
   render();
 }
 
-// Taking an earned item off (or putting it back on) saves right away.
-async function setWorn(id, wear, box) {
-  const look = cleanLook(state.student.look);
-  const off = new Set(look.off);
-  if (wear) off.delete(id);
-  else off.add(id);
-  try {
-    const r = await api('/api/look', { method: 'POST', body: { look: { ...look, off: [...off] }, wardrobe: true } });
-    state.student = r.student;
-    wardrobeScreen();
-  } catch (e) {
-    box.checked = !wear;
-    alert(e.message);
-  }
+// ---------- Wardrobe ----------
+// Saves which pieces are on. Only pieces the student owns are kept (the server checks too).
+async function saveWear(wear) {
+  const look = { ...cleanLook(state.student.look), wear };
+  const r = await api('/api/look', { method: 'POST', body: { look, wardrobe: true } });
+  state.student = r.student;
 }
 
-function wardrobeScreen() {
-  const items = state.catalog.items;
+const SLOT_VIEW = { head: 'head', neck: 'body', scarf: 'body', top: 'body', dress: 'full', outer: 'body', cape: 'full', wrist: 'body', bag: 'body', shoes: 'feet' };
+
+// Every earned piece, one spot at a time. Picking one puts it on right away; each spot holds one.
+// A piece earned in more than one colour gets a row of colour choices once it is on.
+function wardrobeScreen(focus) {
+  const owned = ownedIds();
+  const look = cleanLook(state.student.look);
   const names = state.catalog.skills;
-  const off = new Set(state.student.look?.off || []);
+  const mine = owned.map(itemById).filter(Boolean);
+  const msg = h('p', { class: 'error', role: 'alert' });
+  const without = (slot) => look.wear.filter((w) => itemById(w)?.slot !== slot);
+
+  const choose = async (slot, id, field, value) => {
+    if (state.busy) return;
+    state.busy = true;
+    try {
+      await saveWear(id ? [...without(slot), id] : without(slot));
+      wardrobeScreen({ field, value });
+    } catch (e) {
+      msg.textContent = e.message;
+    } finally {
+      state.busy = false;
+    }
+  };
+
+  const groups = SLOTS.map((slot) => {
+    const pieces = mine.filter((it) => it.slot === slot.id);
+    if (!pieces.length) return null;
+    const field = `wear-${slot.id}`;
+    const current = look.wear.map(itemById).find((it) => it?.slot === slot.id) || null;
+    const view = SLOT_VIEW[slot.id];
+    const option = (value, name, wearId, checked, extra) => {
+      const input = h('input', { type: 'radio', name: field, value, class: 'sr-only' });
+      input.checked = checked;
+      input.addEventListener('change', () => input.checked && choose(slot.id, wearId, field, value));
+      const pic = drawAvatar({ ...look, wear: wearId ? [...without(slot.id), wearId] : without(slot.id) }, owned, { view, label: '' });
+      return h('label', { class: `opt${checked ? ' on' : ''}` }, input, pic, h('span', { class: 'opt-name', text: name }), extra ? h('span', { class: 'era', text: extra }) : null);
+    };
+    const bases = [...new Set(pieces.map((it) => it.base))];
+    const opts = [option('none', 'None', null, !current)];
+    for (const base of bases) {
+      const versions = pieces.filter((it) => it.base === base);
+      const on = current?.base === base;
+      const shown = on ? current.id : base;
+      opts.push(option(base, itemById(base).name, shown, on, versions.length > 1 ? `${versions.length} colours` : null));
+    }
+    let colours = null;
+    const versions = current ? pieces.filter((it) => it.base === current.base) : [];
+    if (versions.length > 1) {
+      const cfield = `wear-color-${slot.id}`;
+      colours = h(
+        'div',
+        { class: 'opts swatches', role: 'radiogroup', 'aria-label': `${itemById(current.base).name} colour` },
+        versions.map((v) => {
+          const input = h('input', { type: 'radio', name: cfield, value: v.id, class: 'sr-only' });
+          input.checked = v.id === current.id;
+          input.addEventListener('change', () => input.checked && choose(slot.id, v.id, cfield, v.id));
+          const sw = h('span', { class: 'swatch', 'aria-hidden': 'true' });
+          sw.style.background = colorHex(v.color) || '#ffffff';
+          const colourName = colorName(v.color) || 'Colour';
+          return h('label', { class: `opt sw${input.checked ? ' on' : ''}`, title: colourName }, input, sw, h('span', { class: 'sr-only', text: colourName }));
+        }),
+      );
+    }
+    return h('fieldset', { class: 'look-group' }, h('legend', { text: slot.name }), h('div', { class: 'opts thumbs' }, opts), colours);
+  });
+
+  const rewardCount = REWARD_ITEMS.filter((it) => owned.includes(it.id)).length;
+  const colourCount = mine.filter((it) => it.kind === 'reward' && it.id !== it.base).length;
+  const progress =
+    rewardCount < REWARD_ITEMS.length
+      ? `You have ${rewardCount} of ${REWARD_ITEMS.length} pieces. Finish a commission with 3 or more right to earn the next one.`
+      : `You have all ${REWARD_ITEMS.length} pieces and ${colourCount} colour versions. Each good commission adds a new colour.`;
+  const locked = SKILL_ITEMS.filter((i) => i.skill && !owned.includes(i.id));
+
   show(
     h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Wardrobe' }), h('span')),
-    h('div', { class: 'card avatar-wrap' }, avatar()),
+    h('div', { class: 'card avatar-wrap look-preview' }, avatar()),
     h('button', { class: 'primary', text: '🪞 Change my look', onclick: () => lookScreen() }),
-    h('p', { class: 'muted small', text: 'Items you earn go on top of your look. Untick one to take it off.' }),
-    h('div', { class: 'items' }, items.map((i) => {
-      const owned = has(i.id);
-      let wear = null;
-      if (owned) {
-        const box = h('input', { type: 'checkbox' });
-        box.checked = !off.has(i.id);
-        box.addEventListener('change', () => setWorn(i.id, box.checked, box));
-        wear = h('label', { class: 'check' }, box, h('span', { text: 'Wearing' }));
-      }
-      return h('div', { class: `item ${owned ? '' : 'locked'}` }, h('strong', { text: i.name }), owned ? wear : h('span', { class: 'muted', text: `Reach ${Math.round(i.threshold * 100)}% in ${names[i.skill]}` }));
-    })),
+    h('p', { class: 'muted small', text: progress }),
+    msg,
+    groups,
+    locked.length
+      ? h(
+          'div',
+          { class: 'card stack' },
+          h('h3', { text: 'Skill pieces' }),
+          h('div', { class: 'items' }, locked.map((i) => h('div', { class: 'item locked' }, h('strong', { text: i.name }), h('span', { class: 'muted', text: `Reach ${Math.round(i.threshold * 100)}% in ${names[i.skill]}` })))),
+        )
+      : null,
   );
-}
-
-function cardsScreen() {
-  const all = state.catalog.cards;
-  const mine = new Set(state.student.cards);
-  show(
-    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Back', onclick: homeScreen }), h('h2', { text: 'Cards' }), h('span', { class: 'muted', text: `${mine.size}/${all.length}` })),
-    h('p', { class: 'muted', text: 'Finish commissions to earn packs. Duplicates turn into Thread.' }),
-    h('div', { class: 'cards' }, all.map((c) => (mine.has(c.id) ? h('div', { class: `tcard ${c.rarity}` }, h('span', { class: 'rarity', text: `${c.rarity} · ${c.type}` }), h('strong', { text: c.name })) : h('div', { class: 'tcard locked' }, h('span', { class: 'rarity', text: c.rarity }), h('strong', { text: '???' }))))),
-  );
+  if (focus) app.querySelector(`input[name="${focus.field}"][value="${focus.value}"]`)?.focus();
 }
 
 // ---------- boot ----------

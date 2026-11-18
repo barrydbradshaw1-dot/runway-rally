@@ -85,9 +85,9 @@ test('full play-through over HTTP; answers never leak to the client', async () =
       if (m2.json.next) task = m2.json.next;
     }
     assert.equal(last.commissionComplete, true);
-    assert.equal(last.pack, null, 'all wrong: no pack, so packs mean learning');
+    assert.equal(last.reward, null, 'all wrong: no new piece, so pieces mean learning');
     assert.ok(last.effortThread > 0, 'effort still earns thread');
-    assert.ok(last.packHint);
+    assert.ok(last.rewardHint);
     assert.equal(last.student.commission, null);
     assert.equal(last.student.stats.answered, 5);
 

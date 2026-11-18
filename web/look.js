@@ -5,6 +5,8 @@
 // asks for race or ethnicity, and no choice is tied to any other (any hair, style or head covering
 // goes with any skin tone). No photo or camera is used.
 
+import { FABRIC_COLORS, cleanWear } from './items.js';
+
 // ---------- colour helpers ----------
 const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)));
 const toRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -169,18 +171,8 @@ export const HEADWEAR = [
 ];
 
 // ---------- fabric colours (styles and head coverings) ----------
-export const FABRIC_COLORS = [
-  { id: 'ruby', name: 'Ruby', hex: '#c8203f' },
-  { id: 'coral', name: 'Coral', hex: '#f0644e' },
-  { id: 'saffron', name: 'Saffron', hex: '#f0a20c' },
-  { id: 'emerald', name: 'Emerald', hex: '#13895c' },
-  { id: 'teal', name: 'Teal', hex: '#0f8a96' },
-  { id: 'sapphire', name: 'Sapphire', hex: '#2448b8' },
-  { id: 'violet', name: 'Violet', hex: '#6a3cd8' },
-  { id: 'rose', name: 'Rose', hex: '#e2508f' },
-  { id: 'ink', name: 'Ink', hex: '#232041' },
-  { id: 'ivory', name: 'Ivory', hex: '#f3ead8' },
-];
+// Fabric colours live with the wearable pieces (items.js), which use them for colour versions.
+export { FABRIC_COLORS };
 
 // ---------- styles ----------
 // Classic garments from around the world, each in a traditional form and a modern take, plus
@@ -293,16 +285,18 @@ export const DEFAULT_LOOK = {
   glasses: 'none',
   earrings: 'none',
   details: ['blush'],
-  off: [], // earned items the student has taken off
+  wear: ['basic-tee'], // earned pieces the student has on, at most one per spot
 };
 
 const byId = (list, id) => list.find((x) => x.id === id);
 export const pick = (field, id) => byId(CHOICES[field], id) || byId(CHOICES[field], DEFAULT_LOOK[field]);
 
 // Turns anything (a saved look, a request body, junk) into a valid look. Unknown values fall back
-// to the default, so an old or tampered look can never break the avatar. itemIds limits "off" to
-// real earned-item ids when the caller knows them (the server does).
-export function cleanLook(raw, { itemIds = null } = {}) {
+// to the default, so an old or tampered look can never break the avatar. owned, when the caller
+// knows it (the server does), limits worn pieces to ones the student has earned. A look saved
+// before pieces were picked per spot listed the pieces taken off ("off"); it is turned into the
+// list of pieces worn.
+export function cleanLook(raw, { owned = null } = {}) {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const out = {};
   for (const field of Object.keys(CHOICES)) {
@@ -311,8 +305,12 @@ export function cleanLook(raw, { itemIds = null } = {}) {
   }
   const detailIds = DETAILS.map((d) => d.id);
   out.details = Array.isArray(o.details) ? [...new Set(o.details.filter((d) => detailIds.includes(d)))] : [...DEFAULT_LOOK.details];
-  const okItem = (x) => typeof x === 'string' && (itemIds ? itemIds.includes(x) : /^[a-z0-9-]{1,40}$/.test(x));
-  out.off = Array.isArray(o.off) ? [...new Set(o.off.filter(okItem))].slice(0, 50) : [];
+  let wear = o.wear;
+  if (!Array.isArray(wear)) {
+    const off = Array.isArray(o.off) ? o.off : [];
+    wear = owned ? owned.filter((id) => !off.includes(id)) : DEFAULT_LOOK.wear;
+  }
+  out.wear = cleanWear(wear, owned);
   return out;
 }
 
