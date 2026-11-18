@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SKILL_IDS, makeTask, checkAnswer, parseNumber, mulberry32, THEMES } from '../src/skills.js';
 import { levelFor, updateMastery, pickSkill, chooseTheme, recordInterest, newInterest, isUnlocked } from '../src/adaptive.js';
-import { classSummary, newStudent, startCommission, nextTask, applyAnswer, giveHint, openPack, COMMISSION_LENGTH, PITY_LIMIT } from '../src/logic.js';
+import { classSummary, newStudent, startCommission, nextTask, applyAnswer, giveHint, COMMISSION_LENGTH } from '../src/logic.js';
 
 test('every generator yields a checkable answer and a final hint that shows it, for many seeds', () => {
   for (const skill of SKILL_IDS) {
@@ -79,7 +79,7 @@ test('interest model follows explicit choices but still explores', () => {
   assert.ok(jewelry < 950, 'should keep exploring other themes');
 });
 
-test('a full commission: wrong then right, rewards, pack, and cleanup', () => {
+test('a full commission: wrong then right, rewards, a new piece, and cleanup', () => {
   const rng = mulberry32(42);
   const s = newStudent({ id: 'u1', classCode: 'ABC', nickname: 'Test' });
   startCommission(s, { rng });
@@ -99,7 +99,8 @@ test('a full commission: wrong then right, rewards, pack, and cleanup', () => {
   assert.equal(complete, true);
   assert.equal(s.commission, null);
   assert.equal(s.stats.commissions, 1);
-  assert.ok(s.cards.length === 1 || s.thread > 20);
+  assert.ok(s.unlocks.includes('sun-hat'), 'a good commission earns the first reward piece');
+  assert.ok(s.look.wear.includes('sun-hat'), 'and it goes on right away');
 });
 
 test('two misses reveal the answer, pay effort thread, and never score below zero', () => {
@@ -123,17 +124,6 @@ test('cannot answer the same task twice or an old task', () => {
   const task = nextTask(s, rng);
   applyAnswer(s, task, String(task.answer), rng);
   assert.ok(applyAnswer(s, task, String(task.answer), rng).error);
-});
-
-test('pity: a Rare or better arrives within the pity limit', () => {
-  const s = newStudent({ id: 'u4', classCode: 'ABC', nickname: 'Test' });
-  const alwaysCommon = () => 0.01; // worst-case luck for rarity rolls
-  let sinceRare = 0;
-  for (let n = 0; n < 40; n++) {
-    const { card } = openPack(s, alwaysCommon);
-    sinceRare = card.rarity === 'common' ? sinceRare + 1 : 0;
-    assert.ok(sinceRare <= PITY_LIMIT, `went ${sinceRare} packs without a Rare`);
-  }
 });
 
 test('class summary never flags a skill the student has not tried', () => {

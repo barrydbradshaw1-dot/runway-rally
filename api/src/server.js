@@ -12,7 +12,6 @@ import { createLtiService } from './lti/lti.js';
 import { LtiError } from './lti/jwt.js';
 import {
   ITEMS,
-  CARDS,
   newStudent,
   publicStudent,
   startCommission,
@@ -45,8 +44,7 @@ const AREAS = new Set(['jewelry_bench', 'pattern_table', 'runway', 'cards', 'sto
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 const CATALOG = {
-  items: ITEMS,
-  cards: CARDS,
+  items: ITEMS, // skill pieces; reward pieces are listed in web/items.js, which the client loads
   skills: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].name])),
   skillInfo: Object.fromEntries(SKILL_IDS.map((id) => [id, { name: SKILLS[id].name, prereq: SKILLS[id].prereq, standard: SKILLS[id].standard, codes: SKILLS[id].codes, grade: SKILLS[id].grade }])),
 };

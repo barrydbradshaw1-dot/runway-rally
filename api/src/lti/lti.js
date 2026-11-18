@@ -326,7 +326,7 @@ export function createLtiService({ store, config, fetchImpl = globalThis.fetch, 
       return {
         enabled: config.enabled,
         name: 'Runway Rally',
-        description: 'A fashion-themed math practice game. Students earn outfits and cards by solving math.',
+        description: 'A fashion-themed math practice game. Students earn outfits and accessories by solving math.',
         domain: base,
         redirectUrls: [`${base}/lti/launch`],
         openIdConnectLoginUrl: `${base}/lti/login`,

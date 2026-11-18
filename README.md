@@ -1,10 +1,10 @@
 # Runway Rally (starter)
 
-A mobile-first math game for girls 13 to 16: solve math commissions, earn fashion items and collectible cards.
+A mobile-first math game for girls 13 to 16: solve math commissions, earn fashion pieces that go straight onto your designer.
 This is the pilot starter for the design in the Runway Rally Game Design Document.
 
 **What works now**
-- Browser client (installable PWA): sign in with class code + nickname, pick a themed commission, number pad, layered hints, retries, Thread rewards, item unlocks that appear on the avatar, card packs with a pity rule.
+- Browser client (installable PWA): sign in with class code + nickname, pick a themed commission, number pad, layered hints, retries, Thread rewards, a new piece to wear after each good commission (put on right away, kept in the wardrobe), skill pieces that unlock with mastery.
 - Server-side grading and rewards. Answers never reach the client.
 - Adaptive engine v2 (see "How it teaches" below): 37 skills tied to Georgia's grade 3 to 8 math standards, a short skills check that places each student, worked examples, steadier difficulty, mistake-specific feedback, spaced review, and prerequisite repair after repeated misses. The interest model still follows which areas the student picks (with 20% exploration).
 - **My look**: students design their designer by picking features directly: 20 skin tones, 6 face shapes, eye shape and colour, brows, nose, lips, 18 hair styles from straight to coily (locs, braids, twists, afros and more), 8 head coverings (hijab, turban, head wrap, gele and others), glasses, earrings, freckles and vitiligo, and 15 classic styles from around the world, each in a traditional form and a modern take. The look is saved with the student's progress (no race or ethnicity label is ever asked for or stored, and no camera or photo is used). Earned items layer on top and can be taken off in the Wardrobe.
@@ -148,7 +148,7 @@ The learning design follows well-established findings: start where the student i
 - **Difficulty.** Two misses in a row step down a level, two clean wins step up, and mostly-wrong recent work drops to confidence builders. Easy problems can show at most 60 percent mastery and medium 85 percent, so a skill only reads as mastered after hard problems.
 - **Feedback.** Each generator lists likely wrong answers with a short explanation (for example, adding denominators). Sign slips and decimal-place slips are caught for every skill. After two misses they see every step.
 - **Spaced review.** A missed skill comes back the next day; clean reviews space out to 3, 7 and 21 days. The 3rd and 5th problems of a commission can be review from another skill. A skill left alone for two weeks fades by 10 points (never below 45 percent) and is queued for review.
-- **Rewards tied to learning.** A card pack needs 3 of 5 right or a real mastery gain; otherwise the student still earns Thread for effort and a tip on how to earn the pack.
+- **Rewards tied to learning, never random.** A new piece needs 3 of 5 right or a real mastery gain; otherwise the student still earns Thread for effort and a tip on how to earn the next piece. Pieces come in a fixed order (37 pieces, then each in other colours), so there are no random draws or duplicates.
 - **Session length.** After 3 commissions or about 20 active minutes in a day they get one wrap-up screen with the day's totals and streak. They can keep playing.
 - **Family page.** "For grown-ups" on the home screen makes a private link (`/progress/#k=...`). It shows minutes and days this week, accuracy, what improved, what they are working on and what could use a hand. The key stays in the link fragment and is sent only in a header; making a new link turns the old one off.
 
@@ -173,7 +173,7 @@ The client sends `x-tz-offset` (minutes behind UTC) so days and streaks follow t
 ```
 api/src/skills.js     skill graph and problem generators (templates, fresh variants)
 api/src/adaptive.js   mastery, difficulty, repair, interest model
-api/src/logic.js      commissions, grading, rewards, unlocks, card packs, pity
+api/src/logic.js      commissions, grading, rewards, unlocks
 api/src/server.js     HTTP API + static files, rate limiting, security headers
 api/src/store.js      memory and Postgres storage
 api/db/schema.sql     tables (student state as JSONB for the pilot)
@@ -187,7 +187,7 @@ scripts/              droplet setup, deploy, backup, restore test
 ## Adding content
 
 - New math skill: add a generator in `skills.js`, register it in `SKILLS` with its prerequisites, add tests.
-- New fashion item or card: add to `ITEMS` / `CARDS` in `logic.js` and draw it in `avatar()` in `web/app.js`.
+- New piece to wear: add it to `REWARD_ITEMS` (or `SKILL_ITEMS`) in `web/items.js` and draw it in `ITEM_ART` in `web/avatar.js`. A test checks every piece has art.
 - A generator returns `answer` (a number), `answerText` (how it is written, such as `3/4` or `-2`), three hints whose last one states `answerText`, and `mistakes` (likely wrong answers with a short explanation). Set `requireFraction` when the answer must be a fraction. The test suite checks every skill, level and theme across hundreds of seeds.
 
 ## Teachers, classes and deleting data

@@ -22,48 +22,50 @@ import {
 } from './adaptive.js';
 // The avatar's look is defined once in the web client and shared here, so both check the same list.
 import { cleanLook } from '../../web/look.js';
+import { SKILL_ITEMS, CARD_ITEMS, itemById, nextReward } from '../../web/items.js';
 
 export const COMMISSION_LENGTH = 5;
 export const MAX_ATTEMPTS = 2;
-export const PITY_LIMIT = 4; // a Rare or better is guaranteed within this many packs
-export const PACK_MIN_CORRECT = 3; // a pack needs 3 of 5 right...
-export const PACK_MIN_GAIN = 0.08; // ...or clear progress on the skill
+export const REWARD_MIN_CORRECT = 3; // a new piece needs 3 of 5 right...
+export const REWARD_MIN_GAIN = 0.08; // ...or clear progress on the skill
+export const ALL_COLLECTED_THREAD = 5; // once every piece and colour is theirs
 export const REVIEW_SLOTS = [2, 4]; // 3rd and 5th problems can be review from another skill
 export const SESSION_COMMISSIONS = 3;
 export const SESSION_SECONDS = 20 * 60;
 export const PLACEMENT_MAX = 18;
 const DAY = 86_400_000;
 
-export const ITEMS = [
-  { id: 'basic-tee', name: 'Studio Tee', slot: 'top', skill: null, threshold: 0 },
-  { id: 'fraction-jacket', name: 'Fraction Jacket', slot: 'outer', skill: 'frac_part', threshold: 0.5 },
-  { id: 'gala-gown', name: 'Gala Gown', slot: 'dress', skill: 'frac_add', threshold: 0.5 },
-  { id: 'ratio-pearls', name: 'Ratio Pearl Set', slot: 'jewelry', skill: 'ratio', threshold: 0.5 },
-  { id: 'sale-scarf', name: 'Sale-Day Scarf', slot: 'accessory', skill: 'percent', threshold: 0.5 },
-  { id: 'couture-cape', name: 'Couture Cape', slot: 'outer', skill: 'frac_part', threshold: 0.8 },
-  { id: 'crystal-crown', name: 'Crystal Crown', slot: 'jewelry', skill: 'ratio', threshold: 0.8 },
-];
+// Skill pieces come from skill scores; reward pieces from finished commissions (see web/items.js).
+export const ITEMS = SKILL_ITEMS;
 
-const ITEM_IDS = ITEMS.map((i) => i.id);
-
-// Saves the student's chosen look (features, hair, style). Only known choices are kept.
-// wardrobe: only an earned item was put on or taken off, so it doesn't count as designing a look.
+// Saves the student's chosen look (features, hair, style, pieces worn). Only known choices and
+// pieces the student owns are kept. wardrobe: only pieces were put on or taken off, so it doesn't
+// count as designing a look.
 export function setLook(student, raw, { wardrobe = false } = {}) {
-  student.look = cleanLook(raw, { itemIds: ITEM_IDS });
+  student.look = cleanLook(raw, { owned: student.unlocks });
   if (!wardrobe) student.lookSet = true;
   return student.look;
 }
 
-export const CARDS = [
-  { id: 'muse-mira', name: 'Mira, Gala Client', type: 'muse', rarity: 'common' },
-  { id: 'muse-juno', name: 'Juno, Street Stylist', type: 'muse', rarity: 'common' },
-  { id: 'fabric-silk', name: 'Moonsilk', type: 'fabric', rarity: 'common' },
-  { id: 'gem-opal', name: 'Aurora Opal', type: 'gem', rarity: 'common' },
-  { id: 'skill-hint', name: 'Extra Hint Charm', type: 'skill', rarity: 'rare' },
-  { id: 'style-neon', name: 'Neon Street Look', type: 'style', rarity: 'rare' },
-  { id: 'muse-professor', name: 'Headmistress Hana', type: 'muse', rarity: 'epic' },
-  { id: 'spot-crown', name: 'Spotlight: Starlit Crown', type: 'spotlight', rarity: 'legendary' },
-];
+// Puts a piece on, taking off whatever was in the same spot. Returns the piece it replaced.
+export function wearItem(student, id) {
+  const it = itemById(id);
+  if (!it) return null;
+  const replacedId = student.look.wear.find((w) => itemById(w)?.slot === it.slot && w !== id) || null;
+  student.look.wear = [...student.look.wear.filter((w) => itemById(w)?.slot !== it.slot), id];
+  return replacedId ? itemById(replacedId) : null;
+}
+
+const brief = (it) => it && { id: it.id, name: it.name, slot: it.slot };
+
+// Gives the next reward piece and puts it on. null once every piece and colour is theirs.
+export function awardReward(student) {
+  const id = nextReward(student.unlocks);
+  if (!id) return null;
+  student.unlocks.push(id);
+  const replaced = wearItem(student, id);
+  return { item: brief(itemById(id)), replaced: brief(replaced) };
+}
 
 // ---------- clock helpers (tz = minutes behind UTC, as Date#getTimezoneOffset reports) ----------
 export const dayKey = (ms, tz = 0) => new Date(ms - tz * 60_000).toISOString().slice(0, 10);
@@ -87,8 +89,6 @@ export function normalizeStudent(s) {
   }
   s.interest ??= newInterest();
   s.unlocks ??= ['basic-tee'];
-  s.cards ??= [];
-  s.packsSinceRare ??= 0;
   s.commission ??= null;
   s.currentTaskId ??= null;
   s.stats ??= { answered: 0, correct: 0, commissions: 0 };
@@ -101,8 +101,14 @@ export function normalizeStudent(s) {
   s.daily ??= {};
   s.snapshots ??= {};
   s.streak ??= { count: 0, lastDay: null };
-  s.look = cleanLook(s.look, { itemIds: ITEM_IDS });
+  s.look = cleanLook(s.look, { owned: s.unlocks });
   s.lookSet ??= false;
+  // Collectible cards from the first version become the matching pieces, kept in the wardrobe.
+  if (Array.isArray(s.cards)) {
+    for (const c of s.cards) if (CARD_ITEMS[c] && !s.unlocks.includes(CARD_ITEMS[c])) s.unlocks.push(CARD_ITEMS[c]);
+  }
+  delete s.cards;
+  delete s.packsSinceRare;
   return s;
 }
 
@@ -113,8 +119,7 @@ export function publicStudent(s) {
     thread: s.thread,
     mastery: s.mastery,
     unlockedSkills: unlockedSkills(s.mastery),
-    unlocks: s.unlocks.map((id) => ITEMS.find((i) => i.id === id)).filter(Boolean),
-    cards: s.cards,
+    unlocks: s.unlocks.map((id) => brief(itemById(id))).filter(Boolean),
     look: s.look,
     lookSet: s.lookSet,
     stats: s.stats,
@@ -305,7 +310,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
 
   if (c.done >= c.total) {
     const gain = Object.keys(student.mastery).reduce((sum, k) => sum + Math.max(0, student.mastery[k] - (c.startMastery?.[k] ?? student.mastery[k])), 0);
-    const earned = c.correct >= PACK_MIN_CORRECT || gain >= PACK_MIN_GAIN;
+    const earned = c.correct >= REWARD_MIN_CORRECT || gain >= REWARD_MIN_GAIN;
     const bonus = c.correct >= 4 ? 10 : 0;
     student.thread += bonus;
     student.stats.commissions += 1;
@@ -314,12 +319,16 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
     result.bonusThread = bonus;
     result.score = { correct: c.correct, total: c.total };
     if (earned) {
-      result.pack = openPack(student, rng);
+      result.reward = awardReward(student);
+      if (!result.reward) {
+        result.allCollected = ALL_COLLECTED_THREAD;
+        student.thread += ALL_COLLECTED_THREAD;
+      }
     } else {
-      result.pack = null;
+      result.reward = null;
       result.effortThread = 3;
       student.thread += 3;
-      result.packHint = 'Get 3 right in a commission, or keep improving a skill, to earn a card pack.';
+      result.rewardHint = 'Get 3 right in a commission, or keep improving a skill, to earn a new piece to wear.';
     }
     result.repaired = Boolean(c.repair);
     if (!today.wrapShown && (today.commissions >= SESSION_COMMISSIONS || today.seconds >= SESSION_SECONDS)) {
@@ -338,25 +347,11 @@ export function grantUnlocks(student) {
     if (student.unlocks.includes(item.id)) continue;
     if (item.skill && student.mastery[item.skill] >= item.threshold) {
       student.unlocks.push(item.id);
+      wearItem(student, item.id); // a new piece goes on right away
       got.push(item);
     }
   }
   return got;
-}
-
-const RARITY_ORDER = ['common', 'rare', 'epic', 'legendary'];
-
-export function openPack(student, rng) {
-  const r = rng();
-  let rarity = r < 0.7 ? 'common' : r < 0.92 ? 'rare' : r < 0.99 ? 'epic' : 'legendary';
-  if (student.packsSinceRare >= PITY_LIMIT && rarity === 'common') rarity = 'rare';
-  student.packsSinceRare = RARITY_ORDER.indexOf(rarity) >= 1 ? 0 : student.packsSinceRare + 1;
-  const pool = CARDS.filter((c) => c.rarity === rarity);
-  const card = pool[Math.floor(rng() * pool.length)];
-  const duplicate = student.cards.includes(card.id);
-  if (duplicate) student.thread += 3; // duplicates convert to Thread so nothing is wasted
-  else student.cards.push(card.id);
-  return { card, duplicate, threadFromDuplicate: duplicate ? 3 : 0 };
 }
 
 // ---------- placement check ----------

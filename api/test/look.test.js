@@ -15,7 +15,11 @@ test('cleanLook keeps known choices and replaces everything else with the defaul
   assert.equal(mixed.face, DEFAULT_LOOK.face);
   assert.equal(mixed.eyeColor, DEFAULT_LOOK.eyeColor);
   assert.deepEqual(mixed.details, ['freckles']);
-  assert.deepEqual(cleanLook({ off: ['gala-gown', 'nope'] }, { itemIds: ['gala-gown'] }).off, ['gala-gown']);
+  // pieces worn: known ones only, one per spot, and only owned ones when the owner list is known
+  assert.deepEqual(cleanLook({ wear: ['sun-hat', 'nope', 'bucket-hat', 'high-tops~ruby', 'high-tops~teal'] }).wear, ['bucket-hat', 'high-tops~ruby']);
+  assert.deepEqual(cleanLook({ wear: ['sun-hat', 'gala-gown'] }, { owned: ['gala-gown'] }).wear, ['gala-gown']);
+  // a look saved before pieces were picked per spot listed the pieces taken off
+  assert.deepEqual(cleanLook({ off: ['gala-gown'] }, { owned: ['basic-tee', 'gala-gown', 'ratio-pearls'] }).wear, ['basic-tee', 'ratio-pearls']);
   assert.ok(!('race' in mixed) && !('ethnicity' in mixed), 'unknown fields are dropped');
 });
 
@@ -72,13 +76,13 @@ test('the client never uses the camera or photos', async () => {
 test('setLook saves a cleaned look; a wardrobe change does not count as designing', () => {
   const s = newStudent({ id: 'a', classCode: 'X', nickname: 'Ava' });
   assert.equal(publicStudent(s).lookSet, false);
-  setLook(s, { off: ['gala-gown'] }, { wardrobe: true });
-  assert.deepEqual(s.look.off, ['gala-gown']);
+  setLook(s, { wear: [] }, { wardrobe: true });
+  assert.deepEqual(s.look.wear, []);
   assert.equal(s.lookSet, false);
-  setLook(s, { skin: 'tone15', style: 'kente-modern', off: ['made-up'] });
+  setLook(s, { skin: 'tone15', style: 'kente-modern', wear: ['basic-tee', 'crystal-crown'] });
   assert.equal(s.lookSet, true);
   assert.equal(publicStudent(s).look.style, 'kente-modern');
-  assert.deepEqual(s.look.off, []);
+  assert.deepEqual(s.look.wear, ['basic-tee'], 'a piece she has not earned cannot be worn');
 });
 
 test('POST /api/look saves the look with the student and returns it from /api/state', async () => {

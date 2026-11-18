@@ -1,6 +1,7 @@
 // Draws the student's designer as layered SVG: their chosen look, then the items they have earned
 // on top. Placeholder art drawn in code, so it stays small and needs no image files.
 import { pick, cleanLook, mix, describeLook } from './look.js';
+import { itemById, colorHex } from './items.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 let uid = 0; // keeps clip and pattern ids unique when many avatars are on one screen
@@ -697,26 +698,289 @@ function earrings(kind, cheek, out) {
   }
 }
 
-// Earned items, the same pieces as before, layered over the chosen look.
+// ---------- earned pieces ----------
+// tone: the three shades a piece is drawn with. Skill pieces keep their own colours.
+const tone = (hex) => ({ main: hex, dark: mix(hex, '#120a20', 0.32), light: mix(hex, '#ffffff', 0.5) });
+const quad = (p0, p1, p2, t) => [0, 1].map((k) => (1 - t) ** 2 * p0[k] + 2 * t * (1 - t) * p1[k] + t * t * p2[k]);
+
+function jacket(c, { hem = 214, sleeve = c.main, cuff = null, sleeves = true } = {}) {
+  const out = [];
+  if (sleeves) {
+    for (const side of ['L', 'R']) {
+      out.push(line(ARM[side][0], along(ARM[side], 0.95), sleeve, 16));
+      if (cuff) out.push(line(along(ARM[side], 0.86), along(ARM[side], 0.95), cuff, 16));
+    }
+  }
+  out.push(el('path', { d: `M66 146 L91 146 L91 ${hem} L70 ${hem} Z`, fill: c.main }));
+  out.push(el('path', { d: `M109 146 L134 146 L130 ${hem} L109 ${hem} Z`, fill: c.main }));
+  return out;
+}
+
+// Wrist pieces sit on the left wrist, turned to follow the arm.
+const atWrist = (t, kids) => {
+  const [x, y] = along(ARM.L, t);
+  return el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(14)` }, kids);
+};
+const ring = (stroke, w = 2, extra = {}) => el('ellipse', { cx: 0, cy: 0, rx: 8, ry: 2.8, fill: 'none', stroke, 'stroke-width': w, ...extra });
+
+const feet = (draw) => [89, 111].flatMap((cx) => draw(cx));
+const sole = (cx, y = 270) => el('rect', { x: cx - 13, y, width: 26, height: 4, rx: 2, fill: '#ffffff' });
+
 const ITEM_ART = {
+  // skill pieces
   'couture-cape': () => [el('path', { d: 'M52 130 Q100 118 148 130 L168 250 L32 250 Z', fill: '#4b2fb8' })],
   'gala-gown': () => [el('path', { d: 'M76 148 L124 148 L156 262 L44 262 Z', fill: '#ff7ac6' }), el('path', { d: 'M76 148 L124 148 L128 170 L72 170 Z', fill: '#ff9fd8' })],
   'fraction-jacket': () => [el('path', { d: 'M66 146 L90 146 L90 214 L70 214 Z', fill: '#2fc9a2' }), el('path', { d: 'M110 146 L134 146 L130 214 L110 214 Z', fill: '#2fc9a2' })],
   'sale-scarf': () => [el('path', { d: 'M82 144 Q100 160 118 144 L122 156 Q100 174 78 156 Z', fill: '#ffb830' })],
   'ratio-pearls': () => Array.from({ length: 7 }, (_, i) => el('circle', { cx: 80 + i * 6.7, cy: 154 + Math.sin((i / 6) * Math.PI) * 10, r: 3.4, fill: '#fff', stroke: '#d8d0f5' })),
-  'crystal-crown': (top) => [el('path', { d: 'M70 52 L80 30 L92 48 L100 24 L108 48 L120 30 L130 52 Z', fill: '#9ae7ff', stroke: '#4aa8ff', 'stroke-width': 2, transform: `translate(0 ${Math.min(0, top - 30)})` })],
+  'crystal-crown': (c, x) => [el('path', { d: 'M70 52 L80 30 L92 48 L100 24 L108 48 L120 30 L130 52 Z', fill: '#9ae7ff', stroke: '#4aa8ff', 'stroke-width': 2, transform: `translate(0 ${Math.min(0, x.top - 30)})` })],
+
+  // hats and crowns (moved up or down to sit on the hair or head covering)
+  'sun-hat': (c) => [
+    el('ellipse', { cx: 100, cy: 47, rx: 62, ry: 10, fill: c.main }),
+    el('path', { d: 'M66 46 Q66 14 100 14 Q134 14 134 46 Z', fill: c.main }),
+    el('path', { d: 'M66 39 Q100 33 134 39 L134 46 Q100 40 66 46 Z', fill: c.dark }),
+  ],
+  'bucket-hat': (c) => [
+    el('path', { d: 'M66 40 Q66 12 100 12 Q134 12 134 40 Z', fill: c.main }),
+    el('path', { d: 'M56 54 L66 37 L134 37 L144 54 Q100 62 56 54 Z', fill: c.dark }),
+    el('path', { d: 'M62 50 Q100 57 138 50', fill: 'none', stroke: c.light, 'stroke-width': 1.2, 'stroke-dasharray': '3 2' }),
+  ],
+  'baseball-cap': (c) => [
+    el('path', { d: 'M58 48 Q58 10 100 10 Q142 10 142 48 Q100 40 58 48 Z', fill: c.main }),
+    el('path', { d: 'M100 11 L100 42 M80 15 Q74 30 76 44 M120 15 Q126 30 124 44', fill: 'none', stroke: c.dark, 'stroke-width': 1.2 }),
+    el('path', { d: 'M64 47 Q100 37 136 47 Q138 58 100 58 Q62 58 64 47 Z', fill: c.dark }),
+    el('circle', { cx: 100, cy: 11, r: 3, fill: c.dark }),
+  ],
+  'flower-crown': (c) => {
+    const out = [];
+    const a = [60, 56];
+    const m = [100, 22];
+    const b = [140, 56];
+    for (let i = 0; i < 6; i++) {
+      const [x, y] = quad(a, m, b, (i + 0.5) / 6);
+      out.push(el('ellipse', { cx: x, cy: y + 2, rx: 6, ry: 2.6, fill: '#3a9b5c', transform: `rotate(${i % 2 ? 30 : -30} ${x} ${y + 2})` }));
+    }
+    for (let i = 0; i < 7; i++) {
+      const [x, y] = quad(a, m, b, i / 6);
+      const petal = i % 2 ? c.light : c.main;
+      for (let k = 0; k < 5; k++) {
+        const ang = (k / 5) * Math.PI * 2;
+        out.push(el('circle', { cx: x + Math.cos(ang) * 3.6, cy: y + Math.sin(ang) * 3.6, r: 3.2, fill: petal }));
+      }
+      out.push(el('circle', { cx: x, cy: y, r: 2.4, fill: GOLD }));
+    }
+    return out;
+  },
+  'bow-clip': (c) => [
+    el('path', { d: 'M134 50 L120 40 L121 60 Z M134 50 L148 40 L147 60 Z', fill: c.main, stroke: c.dark, 'stroke-width': 1.2, 'stroke-linejoin': 'round' }),
+    el('circle', { cx: 134, cy: 50, r: 3.6, fill: c.dark }),
+  ],
+  'knit-beanie': (c) => [
+    el('path', { d: 'M58 52 Q56 6 100 6 Q144 6 142 52 Z', fill: c.main }),
+    el('path', { d: 'M56 42 Q100 34 144 42 L144 56 Q100 48 56 56 Z', fill: c.dark }),
+    ...[66, 76, 86, 96, 106, 116, 126, 136].map((x) => el('path', { d: `M${x} 41 L${x} 52`, stroke: c.light, 'stroke-width': 1.2, opacity: 0.6 })),
+    el('circle', { cx: 100, cy: 5, r: 9, fill: c.light }),
+  ],
+  'starlit-tiara': (c) => [
+    el('path', { d: 'M74 49 Q100 39 126 49', fill: 'none', stroke: GOLD, 'stroke-width': 3, 'stroke-linecap': 'round' }),
+    el('path', { d: 'M79 46 L85 34 L91 43 L100 20 L109 43 L115 34 L121 46 Q100 40 79 46 Z', fill: c.light, stroke: c.main, 'stroke-width': 1.5, 'stroke-linejoin': 'round' }),
+    el('path', { d: 'M100 24 L102 29 L107 29 L103 32 L104.5 37 L100 34 L95.5 37 L97 32 L93 29 L98 29 Z', fill: GOLD }),
+  ],
+
+  // necklaces
+  'heart-locket': (c) => [
+    el('path', { d: 'M86 142 Q100 166 114 142', fill: 'none', stroke: GOLD, 'stroke-width': 1.5 }),
+    el('path', { d: 'M100 174 L93 166 Q90 161 95 159 Q99 158 100 162 Q101 158 105 159 Q110 161 107 166 Z', fill: c.main, stroke: GOLD, 'stroke-width': 1 }),
+  ],
+  'bead-necklace': (c) => Array.from({ length: 11 }, (_, i) => {
+    const [x, y] = quad([84, 142], [100, 172], [116, 142], i / 10);
+    return el('circle', { cx: x, cy: y, r: 3, fill: i % 2 ? c.light : c.main });
+  }),
+  'chain-necklace': (c) => [
+    el('path', { d: 'M86 142 Q100 164 114 142', fill: 'none', stroke: c.main, 'stroke-width': 3, 'stroke-dasharray': '3 1.6' }),
+    el('rect', { x: 96, y: 152, width: 8, height: 10, rx: 2, fill: c.main }),
+  ],
+  choker: (c) => [
+    el('path', { d: 'M88 134 Q100 140 112 134 L112 139 Q100 145 88 139 Z', fill: c.main }),
+    el('circle', { cx: 100, cy: 143, r: 2.6, fill: c.light, stroke: GOLD, 'stroke-width': 0.8 }),
+  ],
+  'opal-pendant': (c) => [
+    el('path', { d: 'M86 142 Q100 162 114 142', fill: 'none', stroke: GOLD, 'stroke-width': 1.5 }),
+    el('ellipse', { cx: 100, cy: 166, rx: 5, ry: 7, fill: c.main, stroke: GOLD, 'stroke-width': 1.2 }),
+    el('ellipse', { cx: 98.5, cy: 163.5, rx: 1.8, ry: 2.6, fill: c.light }),
+  ],
+
+  // scarves and stoles
+  'silk-neckerchief': (c) => [
+    el('path', { d: 'M84 140 Q100 152 116 140 L118 148 Q100 160 82 148 Z', fill: c.main }),
+    el('path', { d: 'M93 152 L107 152 L100 174 Z', fill: c.main }),
+    el('circle', { cx: 100, cy: 152, r: 4, fill: c.dark }),
+  ],
+  'knit-scarf': (c) => [
+    el('path', { d: 'M82 136 Q100 150 118 136 L122 150 Q100 166 78 150 Z', fill: c.main }),
+    el('rect', { x: 104, y: 150, width: 14, height: 52, rx: 3, fill: c.main }),
+    el('rect', { x: 104, y: 166, width: 14, height: 5, fill: c.light }),
+    el('rect', { x: 104, y: 182, width: 14, height: 5, fill: c.light }),
+    el('path', { d: 'M106 202 L106 208 M110 202 L110 208 M114 202 L114 208', stroke: c.main, 'stroke-width': 2, 'stroke-linecap': 'round' }),
+  ],
+  'moonsilk-stole': (c) => [
+    el('path', { d: 'M70 148 Q100 136 130 148 L136 228 L124 228 L120 164 Q100 152 80 164 L76 228 L64 228 Z', fill: c.main, opacity: 0.92 }),
+    el('path', { d: 'M72 158 Q70 190 70 222 M128 158 Q130 190 130 222', fill: 'none', stroke: c.light, 'stroke-width': 2, opacity: 0.8 }),
+  ],
+
+  // jackets
+  'denim-jacket': (c) => [
+    ...jacket(c, { hem: 206, cuff: c.dark }),
+    el('path', { d: 'M88 146 L80 162 L91 156 Z M112 146 L120 162 L109 156 Z', fill: c.dark }),
+    el('rect', { x: 74, y: 168, width: 12, height: 10, rx: 2, fill: 'none', stroke: c.light, 'stroke-width': 1, 'stroke-dasharray': '2 1.5' }),
+    el('rect', { x: 114, y: 168, width: 12, height: 10, rx: 2, fill: 'none', stroke: c.light, 'stroke-width': 1, 'stroke-dasharray': '2 1.5' }),
+    el('path', { d: 'M70 198 L91 198 M109 198 L130 198', stroke: c.light, 'stroke-width': 1, 'stroke-dasharray': '2 1.5' }),
+  ],
+  cardigan: (c) => [
+    ...jacket(c, { hem: 236 }),
+    ...[162, 180, 198, 216].map((y) => el('circle', { cx: 88, cy: y, r: 2, fill: c.light })),
+    el('path', { d: 'M70 232 L91 232 M109 232 L130 232', stroke: c.dark, 'stroke-width': 3 }),
+  ],
+  'varsity-jacket': (c) => [
+    ...jacket(c, { hem: 210, sleeve: IVORY, cuff: c.dark }),
+    el('path', { d: 'M70 202 L91 202 L91 210 L70 210 Z M109 202 L130 202 L130 210 L109 210 Z', fill: c.dark }),
+    el('path', { d: 'M70 205 L91 205 M109 205 L130 205', stroke: IVORY, 'stroke-width': 1.5 }),
+    el('path', { d: 'M86 146 Q100 154 114 146', fill: 'none', stroke: c.dark, 'stroke-width': 4 }),
+  ],
+  blazer: (c) => [
+    ...jacket(c, { hem: 224 }),
+    el('path', { d: 'M91 146 L84 180 L91 172 Z M109 146 L116 180 L109 172 Z', fill: c.dark }),
+    el('path', { d: 'M114 196 L126 196', stroke: c.light, 'stroke-width': 1.5 }),
+    el('circle', { cx: 88, cy: 196, r: 2, fill: GOLD }),
+  ],
+  'puffer-vest': (c) => [
+    ...jacket(c, { hem: 208, sleeves: false }),
+    ...[162, 178, 194].map((y) => el('path', { d: `M68 ${y} L91 ${y} M109 ${y} L132 ${y}`, stroke: c.dark, 'stroke-width': 1.5 })),
+    el('path', { d: 'M86 144 L92 146 L92 152 L86 150 Z M114 144 L108 146 L108 152 L114 150 Z', fill: c.dark }),
+  ],
+  'neon-jacket': (c) => [
+    ...jacket(c, { hem: 194 }),
+    ...['L', 'R'].map((side) => line(along(ARM[side], 0.05), along(ARM[side], 0.9), c.light, 3)),
+    el('path', { d: 'M91 150 L91 194 M109 150 L109 194', stroke: c.light, 'stroke-width': 2 }),
+  ],
+
+  // bracelets and watches (left wrist)
+  'friendship-bracelets': (c) => [atWrist(0.86, [ring(c.main, 2.4)]), atWrist(0.91, [ring(c.light, 2.4, { 'stroke-dasharray': '2 1.5' })])],
+  'smart-watch': (c) => [
+    atWrist(0.88, [
+      el('rect', { x: -8, y: -2.5, width: 16, height: 5, rx: 2, fill: c.dark }),
+      el('rect', { x: -5, y: -5, width: 10, height: 10, rx: 2.5, fill: c.main, stroke: INK, 'stroke-width': 1 }),
+      el('rect', { x: -3, y: -3, width: 6, height: 6, rx: 1.5, fill: c.light }),
+    ]),
+  ],
+  bangles: (c) => [atWrist(0.83, [ring(c.main)]), atWrist(0.88, [ring(GOLD)]), atWrist(0.93, [ring(c.light)])],
+  'charm-bracelet': (c) => [
+    atWrist(0.88, [
+      ring(GOLD, 1.5),
+      el('circle', { cx: -4, cy: 5, r: 2, fill: c.main }),
+      el('circle', { cx: 1, cy: 5.5, r: 2, fill: c.light }),
+      el('path', { d: 'M6 3.5 L7.5 6.5 L4.5 6.5 Z', fill: c.main }),
+    ]),
+  ],
+
+  // bags
+  'crossbody-bag': (c) => [
+    el('path', { d: 'M84 148 L132 206', stroke: c.dark, 'stroke-width': 3, 'stroke-linecap': 'round' }),
+    el('rect', { x: 122, y: 204, width: 26, height: 20, rx: 5, fill: c.main }),
+    el('path', { d: 'M122 209 Q122 204 127 204 L143 204 Q148 204 148 209 Q135 218 122 209 Z', fill: c.dark }),
+    el('circle', { cx: 135, cy: 212, r: 2, fill: GOLD }),
+  ],
+  'tote-bag': (c) => [
+    el('path', { d: 'M131 214 Q140 194 149 214', fill: 'none', stroke: c.dark, 'stroke-width': 2.5 }),
+    el('path', { d: 'M125 212 L155 212 L159 248 L121 248 Z', fill: c.main, stroke: c.dark, 'stroke-width': 1 }),
+    el('rect', { x: 124, y: 226, width: 32, height: 6, fill: c.dark, opacity: 0.6 }),
+  ],
+  backpack: (c) => [
+    el('path', { d: 'M82 148 L80 206 M118 148 L120 206', stroke: c.main, 'stroke-width': 6, 'stroke-linecap': 'round' }),
+    el('rect', { x: 77, y: 180, width: 7, height: 5, rx: 1, fill: c.light }),
+    el('rect', { x: 116, y: 180, width: 7, height: 5, rx: 1, fill: c.light }),
+  ],
+  'mini-purse': (c) => [
+    el('path', { d: 'M120 148 L136 206', stroke: GOLD, 'stroke-width': 1.5, 'stroke-dasharray': '2 1.5' }),
+    el('rect', { x: 128, y: 204, width: 20, height: 15, rx: 6, fill: c.main }),
+    el('path', { d: 'M128 210 Q138 214 148 210', fill: 'none', stroke: c.dark, 'stroke-width': 1.2 }),
+    el('circle', { cx: 138, cy: 212, r: 1.6, fill: GOLD }),
+  ],
+  'gala-clutch': (c) => [
+    el('rect', { x: 127, y: 203, width: 30, height: 15, rx: 4, fill: c.main, stroke: GOLD, 'stroke-width': 1.5 }),
+    el('path', { d: 'M127 209 L157 209', stroke: GOLD, 'stroke-width': 1.2 }),
+    el('circle', { cx: 142, cy: 209, r: 2.2, fill: c.light, stroke: GOLD }),
+  ],
+  'reading-satchel': (c) => [
+    el('path', { d: 'M118 148 L66 206', stroke: c.dark, 'stroke-width': 3.5, 'stroke-linecap': 'round' }),
+    el('rect', { x: 40, y: 202, width: 32, height: 26, rx: 4, fill: c.main }),
+    el('path', { d: 'M40 206 Q40 202 44 202 L68 202 Q72 202 72 206 L72 214 Q56 220 40 214 Z', fill: c.dark }),
+    el('rect', { x: 53, y: 213, width: 6, height: 6, rx: 1, fill: GOLD }),
+  ],
+
+  // shoes (drawn in place of the plain ones)
+  'high-tops': (c) => feet((cx) => [
+    el('rect', { x: cx - 9, y: 250, width: 18, height: 18, rx: 4, fill: c.main }),
+    el('ellipse', { cx, cy: 268, rx: 13, ry: 7, fill: c.main }),
+    sole(cx),
+    el('path', { d: `M${cx - 4} 255 L${cx + 4} 255 M${cx - 4} 260 L${cx + 4} 260`, stroke: '#ffffff', 'stroke-width': 1.4 }),
+  ]),
+  'ankle-boots': (c) => feet((cx) => [
+    el('rect', { x: cx - 8.5, y: 244, width: 17, height: 24, rx: 3, fill: c.main }),
+    el('ellipse', { cx, cy: 268, rx: 12, ry: 6.5, fill: c.main }),
+    el('path', { d: `M${cx - 8.5} 249 L${cx + 8.5} 249`, stroke: c.dark, 'stroke-width': 2 }),
+    el('rect', { x: cx - 12, y: 271, width: 24, height: 3, rx: 1.5, fill: c.dark }),
+  ]),
+  'ballet-flats': (c, x) => feet((cx) => [
+    el('ellipse', { cx, cy: 268, rx: 12, ry: 6, fill: c.main }),
+    el('ellipse', { cx, cy: 265.5, rx: 7, ry: 2.6, fill: x.sk.base }),
+    el('path', { d: `M${cx - 3} 263 L${cx + 3} 266 M${cx + 3} 263 L${cx - 3} 266`, stroke: c.light, 'stroke-width': 1.6 }),
+  ]),
+  'platform-sandals': (c, x) => feet((cx) => [
+    el('ellipse', { cx, cy: 266, rx: 10, ry: 5, fill: x.sk.base }),
+    el('rect', { x: cx - 13, y: 268, width: 26, height: 7, rx: 3, fill: c.dark }),
+    el('rect', { x: cx - 11, y: 261, width: 22, height: 3, rx: 1.5, fill: c.main }),
+    el('rect', { x: cx - 11, y: 265, width: 22, height: 3, rx: 1.5, fill: c.main }),
+  ]),
+  'rain-boots': (c) => feet((cx) => [
+    el('rect', { x: cx - 9, y: 232, width: 18, height: 36, rx: 4, fill: c.main }),
+    el('ellipse', { cx, cy: 268, rx: 13, ry: 7, fill: c.main }),
+    el('rect', { x: cx - 9, y: 232, width: 18, height: 4, rx: 2, fill: c.dark }),
+    el('path', { d: `M${cx - 5} 240 L${cx - 5} 262`, stroke: c.light, 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.7 }),
+  ]),
+  'street-sneakers': (c) => feet((cx) => [
+    el('ellipse', { cx, cy: 268, rx: 13, ry: 7, fill: c.main }),
+    sole(cx),
+    el('path', { d: `M${cx - 8} 267 Q${cx} 261 ${cx + 8} 267`, fill: 'none', stroke: c.light, 'stroke-width': 2 }),
+  ]),
+};
+
+// The pack part of a backpack sits behind the body.
+const BACK_ART = {
+  backpack: (c) => [el('rect', { x: 63, y: 140, width: 74, height: 76, rx: 16, fill: c.dark })],
 };
 
 // Crops for small previews in the look picker.
-const VIEWS = { full: '0 0 200 280', head: '14 -4 172 176', face: '40 58 120 88', eyes: '58 78 84 40', nose: '74 96 52 38', mouth: '80 112 40 28', body: '14 120 172 156' };
+const VIEWS = { full: '0 0 200 280', head: '14 -4 172 176', face: '40 58 120 88', eyes: '58 78 84 40', nose: '74 96 52 38', mouth: '80 112 40 28', body: '14 120 172 156', feet: '58 226 84 52' };
 
 // look: a saved look (cleaned here). owned: ids of earned items. Options: view (crop),
 // hideHair (face-shape previews), label (accessible name; empty string hides the svg from readers).
 export function drawAvatar(rawLook, owned = [], { view = 'full', hideHair = false, label } = {}) {
   const look = cleanLook(rawLook);
   const ctx = { uid: ++uid };
-  const worn = (id) => owned.includes(id) && !look.off.includes(id);
-  ctx.teeColor = worn('basic-tee') ? '#ffffff' : pick('styleColor', look.styleColor).hex;
+  // One worn piece per spot. A colour version ("sun-hat~teal") is drawn with the base piece's art.
+  const on = new Map();
+  for (const id of look.wear) {
+    const it = itemById(id);
+    if (it && owned.includes(id)) on.set(it.slot, it);
+  }
+  const art = (slot, table = ITEM_ART) => {
+    const it = on.get(slot);
+    const fn = it && table[it.base];
+    return fn ? [fn(tone(colorHex(it.color) || '#888888'), { top, sk })].flat() : [];
+  };
+  ctx.teeColor = on.get('top') ? '#ffffff' : pick('styleColor', look.styleColor).hex;
   const sk = pick('skin', look.skin);
   const hairHex = pick('hairColor', look.hairColor).hex;
   const hc = { main: hairHex, shade: mix(hairHex, '#120a20', 0.28), shine: mix(hairHex, '#ffffff', 0.45) };
@@ -730,14 +994,14 @@ export function drawAvatar(rawLook, owned = [], { view = 'full', hideHair = fals
   const defs = el('defs');
   const L = [defs];
 
-  if (worn('couture-cape')) L.push(...ITEM_ART['couture-cape']());
+  L.push(...art('cape'), ...art('bag', BACK_ART));
   headwearBack(head.id, hwColor, L);
   if (showBack) L.push(...hair.back(hc));
   // legs, shoes, arms, neck
   L.push(el('rect', { x: 82, y: 214, width: 14, height: 50, rx: 6, fill: sk.base }));
   L.push(el('rect', { x: 104, y: 214, width: 14, height: 50, rx: 6, fill: sk.base }));
-  L.push(el('ellipse', { cx: 89, cy: 268, rx: 13, ry: 7, fill: '#ff7ac6' }));
-  L.push(el('ellipse', { cx: 111, cy: 268, rx: 13, ry: 7, fill: '#ff7ac6' }));
+  if (on.get('shoes')) L.push(...art('shoes'));
+  else for (const cx of [89, 111]) L.push(el('ellipse', { cx, cy: 268, rx: 13, ry: 7, fill: '#ff7ac6' }));
   for (const side of ['L', 'R']) {
     L.push(line(...ARM[side], sk.base, 12));
     const [hx, hy] = along(ARM[side], 1.08);
@@ -750,11 +1014,10 @@ export function drawAvatar(rawLook, owned = [], { view = 'full', hideHair = fals
     L.push(el('path', { d: blob(96, 134, 6, 4), fill: sk.light, opacity: 0.85 }));
   }
   L.push(...outfit(look, ctx, defs));
-  if (worn('gala-gown')) L.push(...ITEM_ART['gala-gown']());
-  if (worn('fraction-jacket')) L.push(...ITEM_ART['fraction-jacket']());
+  L.push(...art('dress'), ...art('outer'), ...art('wrist'));
   headwearDrape(head.id, hwColor, L);
-  if (worn('sale-scarf') && head.id !== 'hijab') L.push(...ITEM_ART['sale-scarf']());
-  if (worn('ratio-pearls') && head.id !== 'hijab') L.push(...ITEM_ART['ratio-pearls']());
+  if (head.id !== 'hijab') L.push(...art('scarf'), ...art('neck'));
+  L.push(...art('bag'));
 
   // ears, head, face
   if (head.id !== 'hijab') {
@@ -786,13 +1049,16 @@ export function drawAvatar(rawLook, owned = [], { view = 'full', hideHair = fals
   headwearFront(head.id, hwColor, top, L);
   if (head.id !== 'hijab') earrings(look.earrings, cheek, L);
   glasses(look.glasses, L);
-  if (worn('crystal-crown')) L.push(...ITEM_ART['crystal-crown'](top));
+  const lift = Math.max(-24, Math.min(8, top - 27)); // hats sit on the hair or head covering
+  const hat = art('head');
+  if (hat.length) L.push(on.get('head').base === 'crystal-crown' ? hat[0] : el('g', { transform: `translate(0 ${lift})` }, hat));
 
   const svg = el('svg', { class: 'avatar', viewBox: VIEWS[view] || VIEWS.full }, L);
   if (label === '') svg.setAttribute('aria-hidden', 'true');
   else {
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', label || `${describeLook(look)}${owned.some(worn) ? ', wearing the items you have earned' : ''}`);
+    const pieces = [...on.values()].filter((it) => it.id !== 'basic-tee').map((it) => it.name);
+    svg.setAttribute('aria-label', label || `${describeLook(look)}${pieces.length ? `, wearing ${pieces.join(', ')}` : ''}`);
   }
   return svg;
 }

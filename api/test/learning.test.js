@@ -177,9 +177,9 @@ test('the first problem at a new skill and level comes with a worked example, on
   if (`${second.skill}:${second.level}` === key) assert.equal(second.example, null);
 });
 
-// ---------- packs and session end ----------
+// ---------- rewards and session end ----------
 
-test('a pack is earned with 3 of 5 right; fewer earns effort thread and a hint', () => {
+test('a new piece is earned with 3 of 5 right and goes on at once; fewer earns effort thread and a hint', () => {
   const play = (rights) => {
     const rng = mulberry32(21);
     const s = fresh();
@@ -196,12 +196,12 @@ test('a pack is earned with 3 of 5 right; fewer earns effort thread and a hint',
     return last;
   };
   const good = play(3);
-  assert.ok(good.pack && good.pack.card.id);
+  assert.equal(good.reward.item.id, 'sun-hat', 'the first piece in the reward order');
   assert.deepEqual(good.score, { correct: 3, total: 5 });
   const poor = play(1);
-  assert.equal(poor.pack, null);
+  assert.equal(poor.reward, null);
   assert.equal(poor.effortThread, 3);
-  assert.ok(poor.packHint);
+  assert.ok(poor.rewardHint);
 });
 
 test('after 3 commissions in a day she gets one gentle wrap-up, with a streak', () => {
