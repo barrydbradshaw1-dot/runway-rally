@@ -72,6 +72,21 @@ export class MemoryStore {
     return [...this.students.values()].filter((s) => s.classCode === classCode).map((s) => structuredClone(s));
   }
 
+  // ----- one student's full record (per-student export) -----
+  async getStudent(id) {
+    const s = this.students.get(id);
+    return s ? structuredClone(s) : null;
+  }
+  async listTasks(studentId) {
+    return [...this.tasks.values()]
+      .filter((t) => t.studentId === studentId)
+      .map((t) => ({ ...structuredClone(t), createdAt: new Date(this.taskAt.get(t.id) ?? 0).toISOString() }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  async listEvents(studentId) {
+    return this.events.filter((e) => e.studentId === studentId).map(({ type, payload, at }) => ({ type, payload: structuredClone(payload), at }));
+  }
+
   // ----- teachers and classes -----
   async createTeacher(t) {
     this.teachers.set(t.id, { ...t, createdAt: new Date().toISOString() });
@@ -274,6 +289,20 @@ export class PgStore {
   async listClass(classCode) {
     const r = await this.pool.query('SELECT data FROM students WHERE class_code = $1 ORDER BY created_at', [classCode]);
     return r.rows.map((x) => x.data);
+  }
+
+  // ----- one student's full record (per-student export) -----
+  async getStudent(id) {
+    const r = await this.pool.query('SELECT data FROM students WHERE id = $1', [id]);
+    return r.rows[0]?.data ?? null;
+  }
+  async listTasks(studentId) {
+    const r = await this.pool.query('SELECT data, created_at FROM tasks WHERE student_id = $1 ORDER BY created_at', [studentId]);
+    return r.rows.map((x) => ({ ...x.data, createdAt: x.created_at.toISOString() }));
+  }
+  async listEvents(studentId) {
+    const r = await this.pool.query('SELECT type, payload, at FROM events WHERE student_id = $1 ORDER BY at, id', [studentId]);
+    return r.rows.map((x) => ({ type: x.type, payload: x.payload, at: x.at.toISOString() }));
   }
 
   // ----- teachers and classes -----

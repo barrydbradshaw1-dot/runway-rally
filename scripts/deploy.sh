@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 
 [ -f .env ] || { echo "Create .env first (cp .env.example .env)"; exit 1; }
 grep -q '^ADMIN_TOKEN=.\+' .env || { echo "Set ADMIN_TOKEN in .env (openssl rand -hex 24)"; exit 1; }
+grep -q '^BACKUP_PASSPHRASE=.\+' .env || echo "Note: BACKUP_PASSPHRASE is not set in .env, so backups are not encrypted (see README \"Backups\")."
 
 PROFILE=""
 if grep -q '^DATABASE_URL=.*@db:' .env; then PROFILE="--profile localdb"; fi

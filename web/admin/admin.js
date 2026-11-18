@@ -67,6 +67,30 @@ async function api(path, { method = 'GET', body } = {}) {
   return out;
 }
 
+const PRIVACY = '/privacy/';
+const policyLink = (text = 'privacy policy') => h('a', { href: PRIVACY, target: '_blank', rel: 'noopener', text });
+const AGREE_TEXT = 'My school has approved Runway Rally for this class, and I have read the privacy policy.';
+
+// Download a file the server sends (one student's data) with the teacher's sign-in.
+async function download(path) {
+  const res = await fetch(path, { headers: authHeaders() });
+  if (!res.ok) {
+    let msg = 'Could not download.';
+    try {
+      msg = (await res.json()).error || msg;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'runway-rally-student.json';
+  const a = h('a', { href: URL.createObjectURL(await res.blob()), download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 const fmtDay = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 
 async function fetchClass() {
@@ -112,7 +136,7 @@ function loginScreen(msg = '') {
     err,
     go,
   );
-  show(h('div', { class: 'login stack' }, h('h1', { text: 'Teacher console' }), h('p', { class: 'muted', text: 'See who is learning, who is stuck, and where to pull a small group.' }), h('div', { class: 'card' }, form)));
+  show(h('div', { class: 'login stack' }, h('h1', { text: 'Teacher console' }), h('p', { class: 'muted', text: 'See who is learning, who is stuck, and where to pull a small group.' }), h('div', { class: 'card' }, form), h('p', { class: 'muted' }, policyLink('Privacy policy'))));
 }
 
 function retentionNote() {
@@ -135,6 +159,7 @@ async function classesScreen(notice = '') {
   const err = h('p', { class: 'error', role: 'alert' });
   const name = h('input', { type: 'text', maxlength: 60, placeholder: 'Example: Period 3 Math', required: true });
   const ends = h('input', { type: 'date' });
+  const agree = h('input', { type: 'checkbox', required: true });
   const legacy = owner ? h('input', { type: 'text', maxlength: 20, autocapitalize: 'characters', placeholder: 'Leave empty for a new code' }) : null;
   const who = owner ? h('select', {}, h('option', { value: '', text: 'No teacher yet' }), teachers.map((t) => h('option', { value: t.id, text: t.name }))) : null;
   const make = h(
@@ -144,7 +169,7 @@ async function classesScreen(notice = '') {
       onsubmit: async (e) => {
         e.preventDefault();
         try {
-          const body = { name: name.value, endsOn: ends.value || null };
+          const body = { name: name.value, endsOn: ends.value || null, agree: agree.checked };
           if (legacy?.value.trim()) body.code = legacy.value.trim().toUpperCase();
           if (who?.value) body.teacherId = who.value;
           const r = await api('/api/admin/classes', { method: 'POST', body });
@@ -158,6 +183,7 @@ async function classesScreen(notice = '') {
     h('label', {}, 'Last day of class (optional)', ends),
     owner ? h('label', {}, 'Code students already use (owner only)', legacy) : null,
     owner ? h('label', {}, 'Teacher', who) : null,
+    h('label', { class: 'check' }, agree, h('span', {}, 'My school has approved Runway Rally for this class, and I have read the ', policyLink(), '.')),
     err,
     h('button', { class: 'primary', type: 'submit', text: 'Create class' }),
   );
@@ -166,16 +192,17 @@ async function classesScreen(notice = '') {
     const assign = owner && c.kind === 'manual'
       ? h('select', { 'aria-label': `Teacher for ${c.code}`, onchange: async (e) => { await api(`/api/admin/class/${encodeURIComponent(c.code)}`, { method: 'PATCH', body: { teacherId: e.target.value || null } }); } }, h('option', { value: '', text: 'No teacher' }), teachers.map((t) => h('option', { value: t.id, text: t.name, selected: t.id === c.teacherId })))
       : null;
-    const register = owner && c.kind === 'unregistered' ? h('button', { text: 'Let students join', onclick: async () => { await api('/api/admin/classes', { method: 'POST', body: { name: c.code, code: c.code } }); classesScreen(`Students can join ${c.code} again.`); } }) : null;
+    const register = owner && c.kind === 'unregistered' ? h('button', { text: 'Let students join', onclick: async () => { if (!confirm(AGREE_TEXT)) return; await api('/api/admin/classes', { method: 'POST', body: { name: c.code, code: c.code, agree: true } }); classesScreen(`Students can join ${c.code} again.`); } }) : null;
+    const approve = c.kind === 'manual' && !c.authorizedAt ? h('button', { text: 'Confirm approval', onclick: () => confirmApproval(c.code).then((ok) => ok && classesScreen(`Thanks. ${c.name || c.code} is confirmed.`)).catch((e) => alert(e.message)) }) : null;
     return h(
       'tr',
       {},
       h('td', { text: c.name || c.code }),
       h('td', { class: 'mono', text: c.code }),
       h('td', { text: c.students ?? '' }),
-      h('td', { text: c.kind === 'unregistered' ? 'Not registered, so no one new can join' : c.endsOn ? `Ends ${fmtDay(c.endsOn)}` : c.kind === 'lti' ? 'Brightspace course' : 'No end date' }),
+      h('td', { text: [c.kind === 'unregistered' ? 'Not registered, so no one new can join' : c.endsOn ? `Ends ${fmtDay(c.endsOn)}` : c.kind === 'lti' ? 'Brightspace course' : 'No end date', c.kind === 'manual' && !c.joinOpen ? 'closed to new students' : null, c.kind === 'manual' && !c.authorizedAt ? 'school approval not confirmed' : null].filter(Boolean).join(' · ') }),
       owner ? h('td', {}, assign || (c.teacherId ? teacherName(c.teacherId) : '')) : null,
-      h('td', {}, h('button', { text: 'Open', onclick: () => openClass(c.code) }), register),
+      h('td', {}, h('button', { text: 'Open', onclick: () => openClass(c.code) }), register, approve),
     );
   });
 
@@ -209,7 +236,7 @@ async function classesScreen(notice = '') {
     h('section', { class: 'panel', 'aria-labelledby': 'c-h' }, h('h2', { id: 'c-h', text: 'Classes' }), classes.length ? h('div', { class: 'tablewrap' }, h('table', { class: 'plain' }, h('thead', {}, h('tr', {}, h('th', { text: 'Name' }), h('th', { text: 'Code' }), h('th', { text: 'Students' }), h('th', { text: 'Status' }), owner ? h('th', { text: 'Teacher' }) : null, h('th', { text: '' }))), h('tbody', {}, rows))) : h('p', { class: 'empty', text: 'No classes yet. Create one below and share its code with your students.' })),
     h('section', { class: 'panel', 'aria-labelledby': 'n-h' }, h('h2', { id: 'n-h', text: 'Create a class' }), h('p', { class: 'muted', text: 'Runway Rally makes a code students type to join, like K7QM-4XPA. Only codes made here work.' }), make),
     teacherPanel,
-    h('section', { class: 'panel' }, h('h2', { text: 'How long data is kept' }), retentionNote()),
+    h('section', { class: 'panel' }, h('h2', { text: 'How long data is kept' }), retentionNote(), h('p', { class: 'muted' }, 'Read the full ', policyLink(), '.')),
   );
 }
 
@@ -229,6 +256,31 @@ async function openClass(code) {
   }
 }
 
+async function confirmApproval(code) {
+  if (!confirm(AGREE_TEXT)) return false;
+  await api(`/api/admin/class/${encodeURIComponent(code)}`, { method: 'PATCH', body: { agree: true } });
+  return true;
+}
+
+async function renameStudent(s) {
+  const nickname = prompt(`New nickname for ${s.nickname} (not a real name):`, '');
+  if (!nickname) return;
+  try {
+    await api(`/api/admin/class/${encodeURIComponent(state.code)}/student/${s.id}`, { method: 'PATCH', body: { nickname } });
+    await reload();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function exportStudent(s) {
+  try {
+    await download(`/api/admin/class/${encodeURIComponent(state.code)}/student/${s.id}/export`);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 async function deleteStudent(s) {
   if (!confirm(`Delete ${s.nickname} and everything they have done in Runway Rally? This cannot be undone.`)) return;
   try {
@@ -240,7 +292,26 @@ async function deleteStudent(s) {
 }
 
 function managePanel() {
-  const { classCode, endsOn, kind } = state.data;
+  const { classCode, endsOn, kind, joinOpen, authorizedAt } = state.data;
+  const toggle = h('button', {
+    text: joinOpen ? 'Close to new students' : 'Open to new students',
+    onclick: async () => {
+      try {
+        await api(`/api/admin/class/${encodeURIComponent(classCode)}`, { method: 'PATCH', body: { joinOpen: !joinOpen } });
+        await reload();
+      } catch (e) {
+        alert(e.message);
+      }
+    },
+  });
+  const joining = kind === 'manual'
+    ? h('div', { class: 'row' }, h('p', { text: joinOpen ? 'New students can join with the class code.' : 'Closed: no one new can join. Students already in the class keep playing.' }), toggle)
+    : null;
+  const approval = kind === 'manual'
+    ? authorizedAt
+      ? h('p', { class: 'muted', text: `School approval confirmed ${new Date(authorizedAt).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}.` })
+      : h('div', { class: 'row' }, h('p', { text: 'Please confirm your school has approved Runway Rally for this class.' }), h('button', { text: 'Confirm approval', onclick: () => confirmApproval(classCode).then((ok) => ok && reload()).catch((e) => alert(e.message)) }))
+    : null;
   const typed = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', placeholder: classCode, 'aria-label': 'Type the class code to confirm' });
   const del = h('button', { class: 'danger', text: 'Delete this class', disabled: true });
   typed.addEventListener('input', () => { del.disabled = typed.value.trim().toUpperCase() !== classCode; });
@@ -259,8 +330,11 @@ function managePanel() {
     'section',
     { class: 'panel', 'aria-labelledby': 'd-h' },
     h('h2', { id: 'd-h', text: 'Class data' }),
+    joining,
     kind === 'manual' ? h('div', { class: 'row' }, h('label', {}, 'Last day of class', end), save) : null,
+    approval,
     retentionNote(),
+    h('p', { class: 'muted', text: "Download data on a student's row gives everything kept about that student, for a parent's request to see it. Rename fixes a nickname that is unkind or is a real name." }),
     h('p', { class: 'muted', text: `To delete everything for this class, type ${classCode} and press Delete. Every student in it and all their answers are removed for good.` }),
     h('div', { class: 'row' }, typed, del),
   );
@@ -351,7 +425,13 @@ function dashboard() {
           h('td', { text: s.placement || '—' }),
           h('td', { text: String(s.commissions) }),
           h('td', { text: s.topAreas.length ? s.topAreas.map((a) => AREA_LABELS[a] || a).join(', ') : '—' }),
-          h('td', {}, s.id ? h('button', { class: 'ghost small', text: 'Delete', 'aria-label': `Delete ${s.nickname}`, onclick: () => deleteStudent(s) }) : null),
+          h(
+            'td',
+            { class: 'rowactions' },
+            s.id ? h('button', { class: 'ghost small', text: 'Rename', 'aria-label': `Rename ${s.nickname}`, onclick: () => renameStudent(s) }) : null,
+            s.id ? h('button', { class: 'ghost small', text: 'Download data', 'aria-label': `Download data for ${s.nickname}`, onclick: () => exportStudent(s) }) : null,
+            s.id ? h('button', { class: 'ghost small', text: 'Delete', 'aria-label': `Delete ${s.nickname}`, onclick: () => deleteStudent(s) }) : null,
+          ),
         ),
       ),
     ),

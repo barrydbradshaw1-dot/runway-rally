@@ -8,7 +8,9 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // In the phone apps the game is loaded from inside the app, so API calls go to the server named
 // in <meta name="rr-api"> (the app build adds it). On the website it is empty: same server.
 const API_BASE = (document.querySelector('meta[name="rr-api"]')?.content || '').replace(/\/+$/, '');
-const PRIVACY_URL = document.querySelector('meta[name="rr-privacy"]')?.content || '';
+// The privacy policy: the phone build may name its own address; otherwise the page on the server.
+const PRIVACY_URL = document.querySelector('meta[name="rr-privacy"]')?.content || `${API_BASE}/privacy/`;
+const privacyLink = (text = 'Privacy policy', cls = 'muted center') => h('a', { class: cls, href: PRIVACY_URL, target: '_blank', rel: 'noopener', text });
 const native = Boolean(window.Capacitor?.isNativePlatform?.());
 const plugin = (name) => (native ? window.Capacitor?.Plugins?.[name] : undefined);
 // The phone can clear web storage when space runs low, so the app also keeps the sign-in in Preferences.
@@ -169,6 +171,7 @@ function loginScreen(msg = '') {
     h('label', {}, 'Nickname (no real names, please)', nick),
     err,
     go,
+    h('p', { class: 'muted join-note' }, 'Your teacher set up this class for school. Runway Rally keeps your nickname and what you do in the game, and nothing else about you. ', privacyLink('Privacy policy', '')),
   );
   show(
     h('div', { class: 'center stack' }, h('h1', { text: 'Runway Rally' }), h('p', { class: 'muted', text: 'Design fashion. Earn it with math.' })),
@@ -399,7 +402,7 @@ function grownUps(st) {
       h('button', { text: 'Redo the skills check', onclick: () => startPlacement(true) }),
       st.viaLti ? null : h('button', { class: 'ghost', onclick: signOut, text: 'Switch student' }),
       h('button', { class: 'ghost', text: 'Delete my data', onclick: deleteScreen }),
-      /^https:\/\//.test(PRIVACY_URL) ? h('a', { class: 'muted center', href: PRIVACY_URL, target: '_blank', rel: 'noopener', text: 'Privacy policy' }) : null,
+      privacyLink(),
     ),
   );
   out.append(details);

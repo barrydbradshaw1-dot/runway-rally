@@ -9,10 +9,11 @@ This is the pilot starter for the design in the Runway Rally Game Design Documen
 - Adaptive engine v2 (see "How it teaches" below): 37 skills tied to Georgia's grade 3 to 8 math standards, a short skills check that places each student, worked examples, steadier difficulty, mistake-specific feedback, spaced review, and prerequisite repair after repeated misses. The interest model still follows which areas the student picks (with 20% exploration).
 - **My look**: students design their designer by picking features directly: 20 skin tones, 6 face shapes, eye shape and colour, brows, nose, lips, 18 hair styles from straight to coily (locs, braids, twists, afros and more), 8 head coverings (hijab, turban, head wrap, gele and others), glasses, earrings, freckles and vitiligo, and 15 classic styles from around the world, each in a traditional form and a modern take. The look is saved with the student's progress (no race or ethnicity label is ever asked for or stored, and no camera or photo is used). Earned items layer on top and can be taken off in the Wardrobe.
 - Sign-in code (`RR-XXXX-XXXX`) so progress follows the student to a new device, and a private read-only family progress page at `/progress/`.
-- **Teacher console** at `/admin/`: each teacher signs in with their own key, creates classes (each gets a code that can't be guessed), and can delete a student or a whole class. Inside a class they see a mastery heat map by skill, accuracy, favorite game areas, suggested small groups, who has not started, sorting, auto-refresh, and CSV export. A skill is flagged only after 2+ answers with mastery under 40%, or 3 misses in a row. Skills not yet tried are never flagged.
+- **Teacher console** at `/admin/`: each teacher signs in with their own key, creates classes (each gets a code that can't be guessed), can delete a student or a whole class, and can close a class to new students. Inside a class they see a mastery heat map by skill, accuracy, favorite game areas, suggested small groups, who has not started, sorting, auto-refresh, CSV export, and per student: rename, download everything kept about them (JSON), or delete. A skill is flagged only after 2+ answers with mastery under 40%, or 3 misses in a row. Skills not yet tried are never flagged.
+- Privacy: a public privacy policy at `/privacy/` linked from the sign-in screen, the For grown-ups menu and the console; teachers confirm their school's approval for each class; a nickname filter; a written retention schedule; deletion; per-student export; encrypted backups and rotated logs. See "Privacy controls" below.
 - Postgres storage (or an in-memory store for development), Docker Compose with automatic HTTPS, backup and restore scripts.
 
-**Not built yet (see the GDD roadmap)**: per-teacher accounts (the console uses one shared admin token for now), OneRoster / SSO, offline play queue, data deletion and retention controls, moderation list for nicknames, real art and audio (the avatar is placeholder SVG drawn in code), content authoring tools, native store builds.
+**Not built yet (see the GDD roadmap)**: OneRoster / SSO, offline play queue, real art and audio (the avatar is placeholder SVG drawn in code), content authoring tools, native store builds.
 
 ## Run it locally (no database needed)
 
@@ -38,7 +39,7 @@ curl -H "x-admin-token: dev-admin" http://localhost:3000/api/admin/class/MATH-7A
 2. **Harden once, as root**: `bash scripts/setup-droplet.sh` installs Docker, enables the firewall (22, 80, 443), fail2ban, and creates a non-root `rally` user. Open a second terminal and confirm `ssh rally@<ip>` works before closing the root session.
 3. **As `rally`**: clone the repo, `cp .env.example .env`, and fill it in (`DOMAIN`, `ADMIN_TOKEN`, database option A or B).
 4. **Start**: `bash scripts/deploy.sh`. Caddy gets the HTTPS certificate automatically.
-5. **Before any real student signs in**: `bash scripts/backup.sh` then `bash scripts/restore-test.sh`, and schedule the backup with cron. Managed Postgres users rely on the provider's backups and should test a restore there.
+5. **Before any real student signs in**: set `BACKUP_PASSPHRASE` in `.env` (see "Backups"), run `bash scripts/backup.sh` then `bash scripts/restore-test.sh`, and schedule the backup with cron. Managed Postgres users rely on the provider's backups and should test a restore there.
 
 Update later with `git pull && bash scripts/deploy.sh`.
 
@@ -196,7 +197,7 @@ scripts/              droplet setup, deploy, backup, restore test
 - **Teacher:** signs in with their own key, creates classes, and sees only their own. Removing a teacher ends their access; their classes stay and the owner can hand them to someone else.
 - **Deleting a student:** the Delete button on that student's row removes the student, their answers, tasks, sign-in and recovery codes, and family link.
 - **Deleting a class:** type the class code under Class data and press Delete. Every student in it goes with it. This is how to meet a school's deletion request (Georgia's Student Data Privacy Act asks for 45 days).
-- **Audit log:** each deletion, retention run and teacher change is logged with counts only, never nicknames. The owner can read it at `GET /api/admin/audit`.
+- **Audit log:** each deletion, rename, export, retention run and teacher change is logged with counts only, never nicknames. The owner can read it at `GET /api/admin/audit`.
 
 **Upgrading an existing server.** Classes made before this version were never registered, so new students can't join them. Their current students keep playing. Sign in as the owner: those codes show as "Not registered". Press **Let students join** to keep a code, or create a new class and share its new code.
 
@@ -204,8 +205,10 @@ scripts/              droplet setup, deploy, backup, restore test
 | --- | --- | --- |
 | `GET /api/admin/me` | any | who is signed in, and the retention settings |
 | `GET /api/admin/classes` | any | classes this login can see, with student counts |
-| `POST /api/admin/classes` `{name, endsOn?}` | owner, teacher | create a class with a new code; the owner may also pass `code` and `teacherId` |
-| `PATCH /api/admin/class/:code` `{name?, endsOn?}` | owner, teacher | rename or set the last day; the owner may set `teacherId` |
+| `POST /api/admin/classes` `{name, endsOn?, agree: true}` | owner, teacher | create a class with a new code; `agree` confirms school approval; the owner may also pass `code` and `teacherId` |
+| `PATCH /api/admin/class/:code` `{name?, endsOn?, joinOpen?, agree?}` | owner, teacher | rename, set the last day, open or close joining, confirm school approval; the owner may set `teacherId` |
+| `PATCH /api/admin/class/:code/student/:id` `{nickname}` | owner, teacher, Brightspace | rename a student (same nickname checks as joining) |
+| `GET /api/admin/class/:code/student/:id/export` | owner, teacher, Brightspace | download everything kept about one student as JSON |
 | `DELETE /api/admin/class/:code/student/:id` | owner, teacher, Brightspace | delete one student |
 | `DELETE /api/admin/class/:code` `{confirm: code}` | owner, teacher, Brightspace | delete the class and all its students |
 | `GET`, `POST /api/admin/teachers` | owner | list or add teachers |
@@ -226,10 +229,37 @@ The server deletes old data on its own, once when it starts and then every 24 ho
 
 When a school's agreement ends, set the class's last day (or delete the class) so its data goes within 30 days. Nightly backups keep 14 copies, so deleted data can stay in a backup for up to 14 more days. Each run logs its counts to the server log and the audit log.
 
+## Privacy controls
+
+- **Privacy policy:** `web/privacy/index.html`, served at `/privacy/`. Items in yellow `[brackets]` still need a decision. When a change affects what the policy promises, also set `POLICY_VERSION` in `api/src/server.js` to the new date.
+- **School approval (consent for students under 13):** making a class needs the teacher to tick "My school has approved Runway Rally for this class, and I have read the privacy policy". The class records when, by whom and which policy version. Classes made before this was added still work; the console marks them "school approval not confirmed" with a **Confirm approval** button. Brightspace courses are approved when the school installs the tool.
+- **Students** see one line under the sign-in form saying what Runway Rally keeps, with a link to the policy.
+- **Nicknames:** `api/src/nickname.js` turns down rude words (also when spelled with look-alike characters like `5h1t`) and names that look like a full real name, such as `Maya Lopez` (a common first name followed by another word). A first name with an initial, like `Maya R`, is allowed. Add words with `NICKNAME_BLOCKLIST=word1,word2` in `.env`. A teacher can **Rename** any student from the class page.
+- **Closing a class:** **Close to new students** under Class data stops new joins with that code. Students already in the class keep playing and can still use their sign-in codes.
+- **Per-student export:** **Download data** on a student's row saves a JSON file with everything kept about that student: their profile and progress, every problem served and every answer and sign-in event. Sign-in tokens, the recovery code and the family link are stored only as hashes and are not in it. Use it to answer a parent's request to see a record (FERPA, 45 days).
+
+## Backups
+
+`scripts/backup.sh` writes `backups/rally-YYYYmmdd-HHMM.sql.gz.enc`, encrypted with AES-256 using `BACKUP_PASSPHRASE` from `.env`, and keeps the newest 14. Without the passphrase it still writes an unencrypted backup, as before, and warns.
+
+1. Make a passphrase: `openssl rand -base64 32`, and put it in `.env` as `BACKUP_PASSPHRASE=...`.
+2. Save the same passphrase in your password manager. It is the only way to open the backups, including DigitalOcean's copies of the droplet if the droplet itself is lost.
+3. Run `bash scripts/backup.sh`, then `bash scripts/restore-test.sh` to prove the new backup opens.
+4. Delete the old unencrypted backups: `rm backups/rally-*.sql.gz` (the script reminds you while any are left).
+
+To restore a backup by hand into the bundled database:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in backups/rally-YYYYmmdd-HHMM.sql.gz.enc | gunzip -c \
+  | docker compose --profile localdb exec -T db psql -U rally -d rally
+```
+
+openssl asks for the passphrase. Container logs are rotated (5 files of 10 MB per service, set in `docker-compose.yml`).
+
 ## Safety notes for the pilot
 
 - Only a class code and nickname are collected (or, via Brightspace, an opaque user hash and an auto nickname). No names, emails, locations or free chat unless you opt in with `LTI_STORE_NAMES=1`.
-- `cleanNickname` has an empty blocklist. **Add a real moderation list before students use it.**
+- Nicknames are filtered (see "Privacy controls"). No word list catches everything, so teachers should glance at their class list; Rename fixes anything that slips through.
 - Each teacher has their own key, stored only as a SHA-256 hash and shown once. A teacher sees only the classes they created or were given. Brightspace instructors get course-scoped signed sessions. `ADMIN_TOKEN` belongs to the server owner alone; don't share it with teachers.
 - Students can join only a class created in the console. Codes are 8 characters from a 31-letter alphabet (about 850 billion possibilities), and joins are limited to 20 tries a minute per IP.
 - Student tokens are stored hashed. Student data is isolated by class code in queries, but there is no per-school tenant table yet.

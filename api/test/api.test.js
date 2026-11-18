@@ -282,7 +282,7 @@ test('students can only join a class a teacher created, and class codes cannot b
 
     const codes = new Set();
     for (let i = 0; i < 5; i++) {
-      const made = await call('/api/admin/classes', { method: 'POST', headers: OWNER, body: { name: `Period ${i}` } });
+      const made = await call('/api/admin/classes', { method: 'POST', headers: OWNER, body: { agree: true, name: `Period ${i}` } });
       assert.equal(made.status, 201);
       assert.match(made.json.class.code, /^[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$/);
       codes.add(made.json.class.code);
@@ -320,7 +320,7 @@ test('each teacher has their own key and sees only their own classes', async () 
     assert.ok(!list.text.includes(a.json.key) && !list.text.includes('keyHash'));
 
     assert.equal((await call('/api/admin/me', { headers: A })).json.kind, 'teacher');
-    const made = await call('/api/admin/classes', { method: 'POST', headers: A, body: { name: 'Period 3' } });
+    const made = await call('/api/admin/classes', { method: 'POST', headers: A, body: { agree: true, name: 'Period 3' } });
     const code = made.json.class.code;
     await call('/api/session', { method: 'POST', body: { classCode: code, nickname: 'Ava' } });
 
@@ -331,7 +331,7 @@ test('each teacher has their own key and sees only their own classes', async () 
     assert.deepEqual((await call('/api/admin/classes', { headers: A })).json.classes.map((c) => c.code), [code]);
     // teachers cannot manage other teachers or pick a class code
     assert.equal((await call('/api/admin/teachers', { headers: A })).status, 403);
-    const own = await call('/api/admin/classes', { method: 'POST', headers: A, body: { name: 'X', code: 'EASY1' } });
+    const own = await call('/api/admin/classes', { method: 'POST', headers: A, body: { agree: true, name: 'X', code: 'EASY1' } });
     assert.notEqual(own.json.class.code, 'EASY1');
     // the owner sees every class
     const all = (await call('/api/admin/classes', { headers: OWNER })).json.classes.map((c) => c.code);
@@ -353,7 +353,7 @@ test('a teacher can delete one student or a whole class, and each deletion is lo
   try {
     const t = await call('/api/admin/teachers', { method: 'POST', headers: OWNER, body: { name: 'Ms Lee' } });
     const T = { 'x-admin-token': t.json.key };
-    const code = (await call('/api/admin/classes', { method: 'POST', headers: T, body: { name: 'Period 3' } })).json.class.code;
+    const code = (await call('/api/admin/classes', { method: 'POST', headers: T, body: { agree: true, name: 'Period 3' } })).json.class.code;
     const ava = await call('/api/session', { method: 'POST', body: { classCode: code, nickname: 'Ava' } });
     const ben = await call('/api/session', { method: 'POST', body: { classCode: code, nickname: 'Ben' } });
     await call('/api/commission/start', { method: 'POST', token: ava.json.token, body: { theme: 'jewelry' } });

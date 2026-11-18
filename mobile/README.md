@@ -16,7 +16,7 @@ The app is the student game only. The teacher console and the family progress pa
 ## Before you build
 
 1. **Deploy the server first.** The apps need this branch's server changes: the API answers the app origins (`APP_ORIGINS`, default `capacitor://localhost,https://localhost`) and has `DELETE /api/me`. Without them every request from the app fails.
-2. **Publish the privacy policy** at a public https address (both stores ask for one, and Google wants it reachable in the app).
+2. **Publish the privacy policy**: the server serves it at `https://YOUR-DOMAIN/privacy/` (both stores ask for one, and Google wants it reachable in the app). The app links there even without `RR_PRIVACY_URL`.
 3. Install Node 20 or newer, then in this folder run `npm install`.
 
 ## Android (any computer)
@@ -24,7 +24,7 @@ The app is the student game only. The teacher console and the family progress pa
 Needs [Android Studio](https://developer.android.com/studio) (it brings the Android SDK and Java).
 
 ```
-RR_API_BASE=https://YOUR-DOMAIN RR_PRIVACY_URL=https://YOUR-DOMAIN/privacy npm run android
+RR_API_BASE=https://YOUR-DOMAIN RR_PRIVACY_URL=https://YOUR-DOMAIN/privacy/ npm run android
 ```
 
 That copies the game into the app and opens Android Studio. Press Run to try it on a phone or emulator. For the store: **Build > Generate Signed App Bundle**, create an upload key, and keep the key file and its password somewhere safe (if you lose it you need Google support to reset it). Play App Signing is on by default for new apps.
@@ -36,7 +36,7 @@ The project targets Android 16 (API 36), which Google Play requires for new apps
 Needs a Mac with Xcode (the version App Store Connect currently requires).
 
 ```
-RR_API_BASE=https://YOUR-DOMAIN RR_PRIVACY_URL=https://YOUR-DOMAIN/privacy npm run ios
+RR_API_BASE=https://YOUR-DOMAIN RR_PRIVACY_URL=https://YOUR-DOMAIN/privacy/ npm run ios
 ```
 
 That opens Xcode. Under **Signing & Capabilities** pick your Apple Developer team, run it on a phone, then **Product > Archive > Distribute App** to send it to App Store Connect and TestFlight.
