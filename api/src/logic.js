@@ -1,7 +1,7 @@
 // Game rules. Pure functions over a student document, so they are easy to test.
 // The server owns grading and rewards; the client never grants anything.
 import { randomUUID } from 'node:crypto';
-import { SKILLS, SKILL_IDS, makeTask, makeExample, gradeAnswer, diagnose, storyFor, depthOf, ancestorsOf, descendantsOf } from './skills.js';
+import { SKILLS, SKILL_IDS, makeTask, makeExample, gradeAnswer, diagnose, diagnoseEs, storyFor, storyForEs, depthOf, ancestorsOf, descendantsOf } from './skills.js';
 import {
   START_MASTERY,
   STRONG_AT,
@@ -141,7 +141,7 @@ function themeToArea(theme) {
   return { jewelry: 'jewelry_bench', fabric: 'pattern_table', runway: 'runway' }[theme];
 }
 
-export function startCommission(student, { theme, rng, now = Date.now() }) {
+export function startCommission(student, { theme, rng, now = Date.now(), es = false }) {
   applyFade(student, now);
   if (theme) recordInterest(student.interest, themeToArea(theme), 2); // an explicit choice is a strong signal
   const chosenTheme = theme || chooseTheme(student.interest, rng);
@@ -160,11 +160,11 @@ export function startCommission(student, { theme, rng, now = Date.now() }) {
     startMastery: { ...student.mastery },
   };
   if (repair) student.wrongStreak[skill] = 0;
-  return { story: storyFor(skill), repair };
+  return { story: storyFor(skill), repair, ...(es ? { storyEs: storyForEs(skill) } : {}) };
 }
 
 // Returns the full task (with answer) for the server to store. Use publicTask() for the client.
-export function nextTask(student, rng, { now = Date.now() } = {}) {
+export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
   const c = student.commission;
   if (!c) throw new Error('no active commission');
   // Mid-commission repair: repeated failure steps back to the weakest prerequisite.
@@ -190,11 +190,11 @@ export function nextTask(student, rng, { now = Date.now() } = {}) {
   }
   let level = chooseLevel(student, skill);
   if ((student.wrongStreak[skill] || 0) >= 3) level = 1; // no prerequisite to fall back on
-  const t = makeTask(skill, level, c.theme, rng);
+  const t = makeTask(skill, level, c.theme, rng, { es });
   const key = `${skill}:${t.level}`;
   let example = null;
   if (!student.examplesSeen.includes(key)) {
-    example = makeExample(skill, t.level, c.theme, rng);
+    example = makeExample(skill, t.level, c.theme, rng, { es });
     student.examplesSeen.push(key);
   }
   const task = {
@@ -226,6 +226,8 @@ export function publicTask(task, commission) {
     placement: Boolean(task.placement),
     number: task.placement ? task.placementNumber : commission.done + 1,
     of: task.placement ? null : commission.total,
+    // Spanish help, only when the class has it turned on
+    ...(task.es ? { es: { prompt: task.es.prompt, example: task.example?.es || null } } : {}),
   };
 }
 
@@ -233,11 +235,16 @@ export function giveHint(task) {
   if (task.answered) return { error: 'task already answered' };
   if (task.placement) return { error: 'hints are off during the skills check. Tap "Not sure yet" to skip it.' };
   task.hintLevel = Math.min(3, task.hintLevel + 1);
-  return { level: task.hintLevel, text: task.hints[task.hintLevel - 1] };
+  const h = { level: task.hintLevel, text: task.hints[task.hintLevel - 1] };
+  if (task.es) h.es = { text: task.es.hints[task.hintLevel - 1] };
+  return h;
 }
 
 const PRAISE = ['Perfect cut!', 'That fits beautifully.', 'Nailed it.', 'Runway ready.', 'Exactly right.'];
 const ENCOURAGE = ['Not quite yet. Try once more, or tap Hint.', 'Not yet. A hint can help, then try again.'];
+// Spanish, same order. Written so they never depend on the student's gender.
+const PRAISE_ES = ['¡Corte perfecto!', 'Queda precioso.', '¡Lo lograste!', '¡Listo para la pasarela!', '¡Exacto!'];
+const ENCOURAGE_ES = ['Todavía no. Inténtalo otra vez, o toca Pista.', 'Todavía no. Una pista puede ayudar; luego inténtalo de nuevo.'];
 
 // Daily log, streak and a once-a-day mastery snapshot for the family progress page.
 function touchDay(student, now, tz) {
@@ -268,7 +275,9 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   const why = correct ? null : diagnose(task, raw);
 
   if (!correct && task.attempts < MAX_ATTEMPTS) {
-    return { correct: false, retry: true, feedback: why || ENCOURAGE[task.attempts % ENCOURAGE.length], specific: Boolean(why) };
+    const retry = { correct: false, retry: true, feedback: why || ENCOURAGE[task.attempts % ENCOURAGE.length], specific: Boolean(why) };
+    if (task.es) retry.es = { feedback: (why && diagnoseEs(task, raw)) || ENCOURAGE_ES[task.attempts % ENCOURAGE_ES.length] };
+    return retry;
   }
 
   task.answered = true;
@@ -288,6 +297,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   if (correct) today.correct += 1;
 
   const thread = correct ? [5, 4, 3, 2][effective] : 1; // trying always pays something
+  const praise = correct ? Math.floor(rng() * PRAISE.length) : 0;
   student.thread += thread;
   c.done += 1;
   if (correct) c.correct += 1;
@@ -299,7 +309,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
     mastery: student.mastery[task.skill],
     skill: task.skill,
     review: Boolean(task.review),
-    feedback: correct ? PRAISE[Math.floor(rng() * PRAISE.length)] : why || 'Good effort. Here is how it works.',
+    feedback: correct ? PRAISE[praise] : why || 'Good effort. Here is how it works.',
     explanation: correct ? null : task.hints[2],
     steps: correct ? null : task.hints,
     revealedAnswer: correct ? null : task.answerText,
@@ -307,6 +317,13 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
     newlyUnlockedSkills: SKILL_IDS.filter((k) => isUnlocked(k, student.mastery) && !isUnlocked(k, c.startMastery || {})),
     commissionComplete: false,
   };
+  if (task.es) {
+    result.es = {
+      feedback: correct ? PRAISE_ES[praise] : (why && diagnoseEs(task, raw)) || 'Buen esfuerzo. Así se resuelve.',
+      explanation: correct ? null : task.es.hints[2],
+      steps: correct ? null : task.es.hints,
+    };
+  }
 
   if (c.done >= c.total) {
     const gain = Object.keys(student.mastery).reduce((sum, k) => sum + Math.max(0, student.mastery[k] - (c.startMastery?.[k] ?? student.mastery[k])), 0);
@@ -329,6 +346,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
       result.effortThread = 3;
       student.thread += 3;
       result.rewardHint = 'Get 3 right in a commission, or keep improving a skill, to earn a new piece to wear.';
+      if (result.es) result.es.rewardHint = 'Acierta 3 en un encargo, o sigue mejorando una habilidad, para ganar una pieza nueva.';
     }
     result.repaired = Boolean(c.repair);
     if (!today.wrapShown && (today.commissions >= SESSION_COMMISSIONS || today.seconds >= SESSION_SECONDS)) {
@@ -372,12 +390,12 @@ function nextProbe(student) {
 }
 
 // Returns a stored task for the next probe, or null when the check is finished.
-export function placementTask(student, rng) {
+export function placementTask(student, rng, { es = false } = {}) {
   const p = student.placement;
   if (!p || p.status !== 'active') return null;
   const skill = nextProbe(student);
   if (!skill || p.asked >= PLACEMENT_MAX) return null;
-  const t = makeTask(skill, 2, chooseTheme(student.interest, rng), rng);
+  const t = makeTask(skill, 2, chooseTheme(student.interest, rng), rng, { es });
   const task = { id: randomUUID(), studentId: student.id, ...t, placement: true, placementNumber: p.asked + 1, attempts: 0, hintLevel: 0, answered: false };
   p.taskId = task.id;
   return task;

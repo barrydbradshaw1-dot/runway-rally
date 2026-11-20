@@ -284,11 +284,19 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     teacherId: c.teacherId || null,
     endsOn: c.endsOn || null,
     joinOpen: c.joinOpen !== false,
+    spanish: c.spanish === true,
     authorizedAt: c.authorization?.at || null,
     authorizedPolicy: c.authorization?.policy || null,
     createdAt: c.createdAt || null,
     students: c.students ?? null,
   });
+
+  // The class has the Spanish help ("Ver en español") turned on. Off unless a teacher turns it on.
+  async function spanishOn(student) {
+    if (!student.classCode) return false;
+    const c = await store.getClass(student.classCode);
+    return c?.spanish === true;
+  }
 
   async function taskFor(student) {
     if (!student.commission || !student.currentTaskId) return null;
@@ -382,6 +390,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         title: cls?.contextTitle || cls?.name || null,
         endsOn: cls?.endsOn || null,
         joinOpen: cls ? cls.joinOpen !== false : false,
+        spanish: cls?.spanish === true,
         authorizedAt: cls?.authorization?.at || null,
         authorizedPolicy: cls?.authorization?.policy || null,
         policyVersion: POLICY_VERSION,
@@ -446,6 +455,10 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       if (body.joinOpen !== undefined) {
         if (typeof body.joinOpen !== 'boolean') throw new HttpError(400, 'joinOpen should be true or false');
         patch.joinOpen = body.joinOpen;
+      }
+      if (body.spanish !== undefined) {
+        if (typeof body.spanish !== 'boolean') throw new HttpError(400, 'spanish should be true or false');
+        patch.spanish = body.spanish;
       }
       if (body.agree === true) patch.authorization = authorization(who);
       if (body.name !== undefined) patch.name = cleanName(body.name) || cls.name;
@@ -576,12 +589,13 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           return send(res, 200, { resumed: true, task: publicTask(existing, student.commission), student: pub(student) });
         }
         if (body.theme !== undefined && !THEMES.includes(body.theme)) throw new HttpError(400, 'unknown theme');
-        const { story, repair } = startCommission(student, { theme: body.theme, rng, now: clock() });
-        const task = nextTask(student, rng, { now: clock() });
+        const es = await spanishOn(student);
+        const { story, storyEs, repair } = startCommission(student, { theme: body.theme, rng, now: clock(), es });
+        const task = nextTask(student, rng, { now: clock(), es });
         await store.saveTask(task);
         await store.saveStudent(student);
         await store.addEvent(student.id, 'commission_start', { skill: student.commission.skill, theme: student.commission.theme, repair });
-        return send(res, 200, { story, repair, task: publicTask(task, student.commission), student: pub(student) });
+        return send(res, 200, { story, ...(storyEs ? { storyEs } : {}), repair, task: publicTask(task, student.commission), student: pub(student) });
       }
 
       if (method === 'POST' && path === '/api/hint') {
@@ -605,7 +619,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         await store.saveTask(task);
         let next = null;
         if (!result.retry && !result.commissionComplete) {
-          const t = nextTask(student, rng, { now: clock() });
+          const t = nextTask(student, rng, { now: clock(), es: await spanishOn(student) });
           await store.saveTask(t);
           next = publicTask(t, student.commission);
         }
@@ -631,7 +645,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           if (t && !t.answered) return send(res, 200, { resumed: true, task: publicTask(t), student: pub(student) });
         }
         startPlacement(student, { now: clock() });
-        const task = placementTask(student, rng);
+        const task = placementTask(student, rng, { es: await spanishOn(student) });
         await store.saveTask(task);
         await store.saveStudent(student);
         await store.addEvent(student.id, 'placement_start');
@@ -645,7 +659,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         const r = applyPlacementAnswer(student, task, body.answer, { skip: body.skip === true });
         if (r.error) throw new HttpError(409, r.error);
         await store.saveTask(task);
-        const next = placementTask(student, rng);
+        const next = placementTask(student, rng, { es: await spanishOn(student) });
         let summary = null;
         if (next) await store.saveTask(next);
         else summary = finishPlacement(student, { now: clock() });

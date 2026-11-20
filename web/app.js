@@ -59,8 +59,11 @@ const state = {
   catalog: null,
   task: null,
   story: '',
+  storyEs: '',
   input: '',
   hint: null,
+  hintEs: null,
+  hintLevel: 0,
   busy: false,
   keyHandler: null,
 };
@@ -96,6 +99,59 @@ function show(...nodes) {
   }
   app.replaceChildren(...nodes.flat().filter(Boolean));
   window.scrollTo(0, 0);
+}
+
+// ---------- Spanish help ("Ver en español") ----------
+// Only when the teacher turned it on for the class: the server then sends a Spanish copy of each problem
+// (task.es). The student's choice is remembered on this device. The English stays on screen.
+const esChosen = () => store.get('rr_es') === '1';
+const useEs = () => Boolean(state.task?.es) && esChosen();
+const L = (en, es) => (useEs() ? es : en);
+
+function esToggle(redraw) {
+  if (!state.task?.es) return null;
+  const on = esChosen();
+  return h('button', {
+    class: 'ghost lang-toggle',
+    lang: on ? 'en' : 'es',
+    'aria-pressed': String(on),
+    text: on ? 'Show in English' : 'Ver en español',
+    onclick: () => {
+      store.set('rr_es', on ? '0' : '1');
+      redraw();
+    },
+  });
+}
+
+// The problem in Spanish with the English under it, or just the English.
+function promptNodes(en, es) {
+  if (useEs() && es) return [h('p', { class: 'prompt', lang: 'es', text: es }), h('p', { class: 'muted small', lang: 'en', text: en })];
+  return [h('p', { class: 'prompt', text: en })];
+}
+
+function speakButton(en, es) {
+  if (!('speechSynthesis' in window)) return null;
+  const spanish = Boolean(useEs() && es);
+  return h('button', {
+    class: 'ghost',
+    'aria-label': spanish ? 'Leer la pregunta en voz alta' : 'Read the question aloud',
+    text: spanish ? '🔊 Leer en voz alta' : '🔊 Read aloud',
+    onclick: () => {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(spanish ? es : en);
+      if (spanish) {
+        u.lang = 'es-US';
+        const voice = speechSynthesis.getVoices().find((v) => /^es([-_]|$)/i.test(v.lang));
+        if (voice) u.voice = voice;
+      }
+      speechSynthesis.speak(u);
+    },
+  });
+}
+
+function storyNode() {
+  const text = useEs() && state.storyEs ? state.storyEs : state.story;
+  return text ? h('p', { class: 'story center', lang: useEs() && state.storyEs ? 'es' : 'en', text }) : null;
 }
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -264,7 +320,10 @@ async function homeScreen() {
       state.student = r.student;
       state.task = r.task;
       state.story = r.resumed ? '' : r.repair ? 'Let us warm up with a building-block skill first. It will make the next one easier.' : r.story;
+      state.storyEs = r.resumed ? '' : r.repair ? 'Primero calentemos con una habilidad básica. Así la siguiente será más fácil.' : r.storyEs || '';
       state.hint = null;
+      state.hintEs = null;
+      state.hintLevel = 0;
       state.input = '';
       if (r.task.example) exampleScreen();
       else taskScreen();
@@ -473,21 +532,25 @@ function skillBars(st) {
 // ---------- worked example ----------
 function exampleScreen() {
   const ex = state.task.example;
+  const exEs = state.task.es?.example;
+  const spanish = Boolean(useEs() && exEs);
   show(
-    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Pause', onclick: () => homeScreen() }), h('div', { class: 'pill', text: 'Watch one first' })),
-    state.story ? h('p', { class: 'story center', text: state.story }) : null,
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Pause', '← Pausa'), onclick: () => homeScreen() }), h('div', { class: 'pill', text: L('Watch one first', 'Mira un ejemplo') })),
+    storyNode(),
     h(
       'div',
       { class: 'card stack pop' },
-      h('p', { class: 'muted', text: 'Here is one solved step by step. Then you try one like it.' }),
-      h('p', { class: 'prompt', text: ex.prompt }),
-      h('ol', { class: 'steps' }, ex.steps.map((step) => h('li', { text: step }))),
+      esToggle(exampleScreen),
+      h('p', { class: 'muted', text: L('Here is one solved step by step. Then you try one like it.', 'Aquí hay uno resuelto paso a paso. Luego intentas uno parecido.') }),
+      ...promptNodes(ex.prompt, exEs?.prompt),
+      h('ol', { class: 'steps', lang: spanish ? 'es' : 'en' }, (spanish ? exEs.steps : ex.steps).map((step) => h('li', { text: step }))),
     ),
     h('button', {
       class: 'primary',
-      text: 'Now I try',
+      text: L('Now I try', 'Ahora lo intento yo'),
       onclick: () => {
         state.story = '';
+        state.storyEs = '';
         taskScreen();
       },
     }),
@@ -522,7 +585,7 @@ function numberPad(onChange) {
     key('−', '-', 'Negative'),
     key('/', '/', 'Fraction bar'),
     h('button', {
-      text: 'Clear',
+      text: L('Clear', 'Borrar'),
       onclick: (e) => {
         if (!state.busy) setInput('');
         if (e.detail) e.currentTarget.blur();
@@ -543,27 +606,32 @@ function numberPad(onChange) {
 function taskScreen() {
   const t = state.task;
   const { display, pad, setInput, onKey } = numberPad();
-  const hintBox = h('div', { class: 'hint-box', hidden: !state.hint }, state.hint ? `Hint: ${state.hint}` : '');
+  const hintLine = () => (useEs() && state.hintEs ? `Pista ${state.hintLevel}: ${state.hintEs}` : `Hint ${state.hintLevel}: ${state.hint}`);
+  const hintBox = h('div', { class: 'hint-box', hidden: !state.hint, lang: useEs() && state.hintEs ? 'es' : 'en' }, state.hint ? hintLine() : '');
   const msg = h('div', { role: 'alert' });
   const hintBtn = h('button', {
-    text: '💡 Hint',
+    text: L('💡 Hint', '💡 Pista'),
     onclick: async (e) => {
       if (e.detail) e.currentTarget.blur();
       try {
         const r = await api('/api/hint', { method: 'POST', body: { taskId: t.id } });
         state.hint = r.text;
+        state.hintEs = r.es?.text || null;
+        state.hintLevel = r.level;
         hintBox.hidden = false;
-        hintBox.textContent = `Hint ${r.level}: ${r.text}`;
+        hintBox.lang = useEs() && state.hintEs ? 'es' : 'en';
+        hintBox.textContent = hintLine();
         if (r.level >= 3) hintBtn.disabled = true;
       } catch (e) {
         msg.replaceChildren(h('div', { class: 'feedback try', text: e.message }));
       }
     },
   });
-  if (state.hint) hintBtn.textContent = '💡 More help';
+  if (state.hint) hintBtn.textContent = L('💡 More help', '💡 Más ayuda');
+  if (state.hintLevel >= 3) hintBtn.disabled = true;
   const check = h('button', {
     class: 'primary',
-    text: 'Check',
+    text: L('Check', 'Revisar'),
     onclick: async () => {
       if (!state.input || state.busy) return;
       state.busy = true;
@@ -574,7 +642,8 @@ function taskScreen() {
         if (r.retry) {
           display.classList.add('shake');
           setTimeout(() => display.classList.remove('shake'), 400);
-          msg.replaceChildren(h('div', { class: 'feedback try', text: r.feedback }));
+          const es = useEs() && r.es?.feedback;
+          msg.replaceChildren(h('div', { class: 'feedback try', lang: es ? 'es' : 'en', text: es || r.feedback }));
           state.busy = false;
           setInput('');
         } else {
@@ -589,16 +658,28 @@ function taskScreen() {
     },
   });
 
-  const speak = 'speechSynthesis' in window ? h('button', { class: 'ghost', 'aria-label': 'Read the question aloud', text: '🔊 Read aloud', onclick: () => { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(t.prompt)); } }) : null;
+  const speak = speakButton(t.prompt, t.es?.prompt);
 
   const dots = h('div', { class: 'progress', role: 'img', 'aria-label': `Task ${t.number} of ${t.of}` }, Array.from({ length: t.of }, (_, i) => h('span', { class: `dot ${i < t.number - 1 ? 'done' : i === t.number - 1 ? 'now' : ''}` })));
-  const formTip = t.requireFraction ? 'Answer as a fraction, like 3/4.' : t.form === 'fraction' ? 'A fraction like 3/4 or a decimal both work.' : null;
+  const formTip = t.requireFraction
+    ? L('Answer as a fraction, like 3/4.', 'Responde con una fracción, como 3/4.')
+    : t.form === 'fraction'
+      ? L('A fraction like 3/4 or a decimal both work.', 'Sirve una fracción como 3/4 o un decimal.')
+      : null;
 
   const nodes = [
-    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Pause', onclick: () => homeScreen() }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })),
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Pause', '← Pausa'), onclick: () => homeScreen() }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })),
     dots,
-    state.story ? h('p', { class: 'story center', text: state.story }) : null,
-    h('div', { class: 'card stack pop' }, t.review ? h('span', { class: 'badge', text: 'Quick review' }) : null, h('p', { class: 'prompt', text: t.prompt }), formTip ? h('p', { class: 'muted small', text: formTip }) : null, speak),
+    storyNode(),
+    h(
+      'div',
+      { class: 'card stack pop' },
+      esToggle(taskScreen),
+      t.review ? h('span', { class: 'badge', text: L('Quick review', 'Repaso rápido') }) : null,
+      ...promptNodes(t.prompt, t.es?.prompt),
+      formTip ? h('p', { class: 'muted small', text: formTip }) : null,
+      speak,
+    ),
     display,
     hintBox,
     msg,
@@ -652,15 +733,17 @@ function placementScreen() {
       msg.replaceChildren(h('div', { class: 'feedback try', text: e.message }));
     }
   };
-  const done = h('button', { class: 'primary', text: 'Next', onclick: () => send(false) });
-  const notSure = h('button', { text: 'Not sure yet', onclick: () => send(true) });
+  const done = h('button', { class: 'primary', text: L('Next', 'Siguiente'), onclick: () => send(false) });
+  const notSure = h('button', { text: L('Not sure yet', 'Todavía no sé'), onclick: () => send(true) });
   done.style.flex = '1';
   notSure.style.flex = '1';
-  const formTip = t.requireFraction ? 'Answer as a fraction, like 3/4.' : null;
+  const formTip = t.requireFraction ? L('Answer as a fraction, like 3/4.', 'Responde con una fracción, como 3/4.') : null;
   show(
-    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: '← Later', onclick: () => homeScreen() }), h('div', { class: 'pill', text: `Skills check · ${t.number}` })),
-    t.number === 1 ? h('p', { class: 'story center', text: 'No hints, no score, nothing to lose. Skip anything you have not learned yet.' }) : null,
-    h('div', { class: 'card stack pop' }, h('p', { class: 'prompt', text: t.prompt }), formTip ? h('p', { class: 'muted small', text: formTip }) : null),
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Later', '← Después'), onclick: () => homeScreen() }), h('div', { class: 'pill', text: L(`Skills check · ${t.number}`, `Prueba de habilidades · ${t.number}`) })),
+    t.number === 1
+      ? h('p', { class: 'story center', text: L('No hints, no score, nothing to lose. Skip anything you have not learned yet.', 'Sin pistas, sin puntos, nada que perder. Salta lo que todavía no hayas aprendido.') })
+      : null,
+    h('div', { class: 'card stack pop' }, esToggle(placementScreen), ...promptNodes(t.prompt, t.es?.prompt), formTip ? h('p', { class: 'muted small', text: formTip }) : null, speakButton(t.prompt, t.es?.prompt)),
     display,
     msg,
     pad,
@@ -687,14 +770,17 @@ function placementDoneScreen(summary) {
 function resultScreen(r) {
   const cls = r.correct ? 'good' : 'reveal';
   const names = state.catalog.skills;
+  const es = useEs() && r.es ? r.es : null;
+  const steps = es?.steps || r.steps;
   const kids = [
+    esToggle(() => resultScreen(r)),
     h(
       'div',
-      { class: `feedback ${cls} pop stack` },
-      h('p', { text: r.feedback }),
-      r.correct ? null : h('p', { text: `The answer is ${r.revealedAnswer}. Here is how:` }),
-      r.correct || !r.steps ? null : h('ol', { class: 'steps' }, r.steps.map((step) => h('li', { text: step }))),
-      h('p', { class: 'reward', text: `+${r.thread} Thread` }),
+      { class: `feedback ${cls} pop stack`, lang: es ? 'es' : 'en' },
+      h('p', { text: es?.feedback || r.feedback }),
+      r.correct ? null : h('p', { text: es ? `La respuesta es ${r.revealedAnswer}. Así se resuelve:` : `The answer is ${r.revealedAnswer}. Here is how:` }),
+      r.correct || !steps ? null : h('ol', { class: 'steps' }, steps.map((step) => h('li', { text: step }))),
+      h('p', { class: 'reward', text: es ? `+${r.thread} de hilo` : `+${r.thread} Thread` }),
     ),
   ];
   for (const u of r.unlocked) kids.push(h('div', { class: 'unlock pop', text: `New item unlocked: ${u.name}` }));
@@ -703,12 +789,15 @@ function resultScreen(r) {
   if (r.unlocked.length) nodes.push(h('div', { class: 'card avatar-wrap' }, avatar()));
   const next = h('button', {
     class: 'primary',
-    text: r.commissionComplete ? (r.reward ? 'See your new piece' : 'See how you did') : 'Next',
+    text: r.commissionComplete ? (r.reward ? L('See your new piece', 'Ver tu pieza nueva') : L('See how you did', 'Ver cómo te fue')) : L('Next', 'Siguiente'),
     onclick: () => {
       state.busy = false;
       state.hint = null;
+      state.hintEs = null;
+      state.hintLevel = 0;
       state.input = '';
       state.story = '';
+      state.storyEs = '';
       if (r.commissionComplete) rewardScreen(r);
       else {
         state.task = r.next;
