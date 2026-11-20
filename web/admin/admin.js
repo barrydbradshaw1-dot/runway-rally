@@ -292,7 +292,7 @@ async function deleteStudent(s) {
 }
 
 function managePanel() {
-  const { classCode, endsOn, kind, joinOpen, authorizedAt } = state.data;
+  const { classCode, endsOn, kind, joinOpen, authorizedAt, spanish } = state.data;
   const toggle = h('button', {
     text: joinOpen ? 'Close to new students' : 'Open to new students',
     onclick: async () => {
@@ -306,6 +306,30 @@ function managePanel() {
   });
   const joining = kind === 'manual'
     ? h('div', { class: 'row' }, h('p', { text: joinOpen ? 'New students can join with the class code.' : 'Closed: no one new can join. Students already in the class keep playing.' }), toggle)
+    : null;
+  // Spanish help: a "Ver en español" button on each problem, Spanish read-aloud and Spanish hints.
+  const spanishToggle = h('button', {
+    text: spanish ? 'Turn off Spanish help' : 'Turn on Spanish help',
+    onclick: async () => {
+      try {
+        await api(`/api/admin/class/${encodeURIComponent(classCode)}`, { method: 'PATCH', body: { spanish: !spanish } });
+        await reload();
+      } catch (e) {
+        alert(e.message);
+      }
+    },
+  });
+  const spanishRow = kind !== 'unregistered'
+    ? h(
+        'div',
+        { class: 'row' },
+        h('p', {
+          text: spanish
+            ? 'Spanish help is on: students see a "Ver en español" button on each problem, with Spanish hints and read-aloud. The English stays on screen.'
+            : 'Spanish help is off. Turn it on to give students a "Ver en español" button on each problem, for English learners.',
+        }),
+        spanishToggle,
+      )
     : null;
   const approval = kind === 'manual'
     ? authorizedAt
@@ -331,6 +355,7 @@ function managePanel() {
     { class: 'panel', 'aria-labelledby': 'd-h' },
     h('h2', { id: 'd-h', text: 'Class data' }),
     joining,
+    spanishRow,
     kind === 'manual' ? h('div', { class: 'row' }, h('label', {}, 'Last day of class', end), save) : null,
     approval,
     retentionNote(),

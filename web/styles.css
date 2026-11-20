@@ -233,3 +233,6 @@ button.danger { background: var(--danger); color: #fff; }
 .policy mark { background: #fff1c2; border-radius: 4px; padding: 0 3px; }
 .join-note { font-size: 0.88rem; }
 .join-note a { color: var(--violet); }
+
+/* Spanish help: "Ver en español" sits at the top right of the problem card */
+.lang-toggle { align-self: flex-end; font-size: 0.9rem; padding: 0.25rem 0.6rem; }

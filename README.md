@@ -191,6 +191,15 @@ scripts/              droplet setup, deploy, backup, restore test
 - New piece to wear: add it to `REWARD_ITEMS` (or `SKILL_ITEMS`) in `web/items.js` and draw it in `ITEM_ART` in `web/avatar.js`. A test checks every piece has art.
 - A generator returns `answer` (a number), `answerText` (how it is written, such as `3/4` or `-2`), three hints whose last one states `answerText`, and `mistakes` (likely wrong answers with a short explanation). Set `requireFraction` when the answer must be a fraction. The test suite checks every skill, level and theme across hundreds of seeds.
 
+## Spanish help ("Ver en español")
+
+Off by default. A teacher turns it on per class in the console (Class data, "Turn on Spanish help"). Then every problem shows a **Ver en español** button. With it on, the student sees the problem in Spanish with the English underneath, plus Spanish hints, feedback and worked steps, Spanish read-aloud (es-US voice), and the problem-screen buttons in Spanish. The student's choice is remembered on that device. The teacher console, menus, avatar and rewards stay in English.
+
+- English problems live in `api/src/skills.js`, Spanish in `api/src/skills.es.js`. Each Spanish generator mirrors the English one and draws its random numbers in the same order, so both languages show the same problem with the same answer.
+- **When you change a generator's math in skills.js, make the same change in skills.es.js.** `api/test/spanish.test.js` checks every skill, level and theme across many seeds and fails if the numbers, answers or mistakes ever differ, or if any Spanish line is missing.
+- Numbers keep US style in both languages (12.50, 1,500), as in Mexico and Central America. A student who types a decimal comma (2,5) is read as 2.5; 1,200 still means twelve hundred.
+- The Spanish was machine-drafted (Nov 2026) and needs a bilingual math teacher's review before students rely on it.
+
 ## Teachers, classes and deleting data
 
 - **Owner:** whoever holds `ADMIN_TOKEN`. Signs in to `/admin/` with it, adds teachers (each gets a key shown once), issues a teacher a new key, removes a teacher, and sees every class.

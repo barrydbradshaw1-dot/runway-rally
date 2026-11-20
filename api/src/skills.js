@@ -8,30 +8,11 @@
 //   hints       three steps; the last one states the answer
 //   mistakes    common wrong answers with feedback that names the slip: [{ value, text }]
 
-export function mulberry32(seed) {
-  let a = seed | 0;
-  return function () {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const int = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
-const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
-export const gcd = (a, b) => {
-  a = Math.abs(a);
-  b = Math.abs(b);
-  while (b) [a, b] = [b, a % b];
-  return a;
-};
-const lcm = (a, b) => (a / gcd(a, b)) * b;
-const money = (cents) => (cents / 100).toFixed(2);
-const neg = (n) => (n < 0 ? `(${n})` : String(n)); // wrap negatives inside expressions: 5 + (-3)
+import { mulberry32, int, pick, gcd, lcm, money, neg, say, intAns, decAns, fracAns, sup, commas, TRIPLES } from './gen-helpers.js';
+import { GENERATORS_ES, STORIES_ES, NOTES_ES } from './skills.es.js';
+export { mulberry32, gcd };
 
 export const THEMES = ['jewelry', 'fabric', 'runway'];
-const say = (theme, byTheme) => byTheme[theme] ?? byTheme.fabric;
 
 // Georgia's K-12 Mathematics Standards (adopted 2021, taught from fall 2023). Codes were checked on
 // Nov 14, 2026 against GaDOE's grade 5 and grade 7 curriculum maps (2023), the K-8 standards document,
@@ -141,16 +122,7 @@ const STORIES = {
   volume_curved: 'Round tins, cones and spheres all need the right amount of space.',
 };
 export const storyFor = (skill) => STORIES[skill];
-
-// ---------- answer helpers ----------
-const intAns = (v) => ({ answer: v, answerText: String(v), form: 'int' });
-const decAns = (cents) => ({ answer: cents / 100, answerText: money(cents), form: 'decimal' });
-function fracAns(n, d, { requireFraction = false, simplest = false } = {}) {
-  const g = gcd(n, d);
-  const rn = n / g;
-  const rd = d / g;
-  return { answer: rn / rd, answerText: rd === 1 ? String(rn) : `${rn}/${rd}`, form: 'fraction', requireFraction, simplest };
-}
+export const storyForEs = (skill) => STORIES_ES[skill] ?? null;
 
 // ---------- foundations ----------
 function multFacts(level, theme, rng) {
@@ -1191,9 +1163,6 @@ function probability(level, theme, rng) {
 }
 
 // ---------- grade 8 ----------
-const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
-const sup = (n) => String(n).split('').map((c) => SUP[c] ?? c).join('');
-const commas = (n) => n.toLocaleString('en-US');
 
 // 8.NR.2: integer exponents
 function exponents(level, theme, rng) {
@@ -1534,7 +1503,6 @@ function systems(level, theme, rng) {
 }
 
 // 8.GSR.8: the Pythagorean theorem
-const TRIPLES = [[3, 4, 5], [6, 8, 10], [5, 12, 13], [9, 12, 15], [8, 15, 17], [12, 16, 20], [7, 24, 25], [20, 21, 29], [9, 40, 41]];
 function pythagorean(level, theme, rng) {
   const [a, b, c] = pick(rng, TRIPLES);
   const unit = say(theme, { jewelry: 'mm', fabric: 'inches', runway: 'feet' });
@@ -1658,27 +1626,74 @@ const GENERATORS = {
   volume_curved: volumeCurved,
 };
 
-export function makeTask(skill, level, theme, rng) {
+// Keep each wrong answer once, and never one that equals the right answer.
+function cleanMistakes(list, answer) {
+  const mistakes = [];
+  for (const m of list || []) {
+    if (!Number.isFinite(m.value) || Math.abs(m.value - answer) < 1e-9) continue;
+    if (mistakes.some((x) => Math.abs(x.value - m.value) < 1e-9)) continue;
+    mistakes.push(m);
+  }
+  return mistakes;
+}
+
+// The same problem in Spanish: replay the English problem's random draws into the Spanish generator,
+// so the numbers match. Returns null if the two ever disagree (spanish.test.js guards against that).
+export function spanishOf(skill, level, theme, draws, t) {
+  const gen = GENERATORS_ES[skill];
+  if (!gen) return null;
+  let i = 0;
+  const replay = () => {
+    if (i >= draws.length) throw new Error('spanish generator drew more numbers than english');
+    return draws[i++];
+  };
+  let es;
+  try {
+    es = gen(level, theme, replay);
+  } catch {
+    return null;
+  }
+  if (i !== draws.length || Math.abs(es.answer - t.answer) > 1e-9 || es.answerText !== t.answerText) return null;
+  const esMistakes = es.mistakes || [];
+  return {
+    prompt: es.prompt,
+    hints: es.hints,
+    mistakes: t.mistakes.map((m) => ({ value: m.value, text: esMistakes.find((x) => Math.abs(x.value - m.value) < 1e-9)?.text ?? null })),
+  };
+}
+
+// opts.es: also build the Spanish version (task.es), for classes with the Spanish help turned on.
+export function makeTask(skill, level, theme, rng, { es = false } = {}) {
   const gen = GENERATORS[skill];
   if (!gen) throw new Error('unknown skill ' + skill);
   const lvl = Math.min(3, Math.max(1, level));
   const th = THEMES.includes(theme) ? theme : 'fabric';
-  const t = gen(lvl, th, rng);
+  const draws = [];
+  const draw = es
+    ? () => {
+        const v = rng();
+        draws.push(v);
+        return v;
+      }
+    : rng;
+  const t = gen(lvl, th, draw);
   // drop "mistakes" that happen to equal the right answer
   // and keep only the first explanation when two mistakes land on the same number
-  const mistakes = [];
-  for (const m of t.mistakes || []) {
-    if (!Number.isFinite(m.value) || Math.abs(m.value - t.answer) < 1e-9) continue;
-    if (mistakes.some((x) => Math.abs(x.value - m.value) < 1e-9)) continue;
-    mistakes.push(m);
+  const mistakes = cleanMistakes(t.mistakes, t.answer);
+  const task = { skill, level: lvl, theme: th, form: 'int', requireFraction: false, simplest: false, ...t, mistakes };
+  if (es) {
+    const spanish = spanishOf(skill, lvl, th, draws, task);
+    if (spanish) task.es = spanish;
   }
-  return { skill, level: lvl, theme: th, form: 'int', requireFraction: false, simplest: false, ...t, mistakes };
+  return task;
 }
 
 // A worked example: the same kind of problem, solved step by step, shown before she tries one herself.
-export function makeExample(skill, level, theme, rng) {
-  const t = makeTask(skill, level, theme, rng);
-  return { prompt: t.prompt, steps: t.hints, answerText: t.answerText };
+export function makeExample(skill, level, theme, rng, { es = false } = {}) {
+  const t = makeTask(skill, level, theme, rng, { es });
+  const ex = { prompt: t.prompt, steps: t.hints, answerText: t.answerText };
+  if (t.es) ex.es = { prompt: t.es.prompt, steps: t.es.hints };
+  return ex;
 }
 
 // Plain numbers only: "$1,200" -> 1200. Fractions are read by parseAnswer.
@@ -1694,7 +1709,10 @@ export function parseNumber(raw) {
 export function parseAnswer(raw) {
   if (typeof raw === 'number') return Number.isFinite(raw) ? { value: raw, isFraction: false } : null;
   if (typeof raw !== 'string' || raw.length > 20) return null;
-  const s = raw.replace(/[$,\s%]/g, '').replace(/[−–]/g, '-');
+  // Many Spanish-speaking countries write 2,5 for 2.5. A comma followed by one or two digits is read as a
+  // decimal point; a comma followed by three digits (1,200) is still a thousands separator.
+  const r = /^\s*-?\$?\d+,\d{1,2}\s*%?\s*$/.test(raw) ? raw.replace(',', '.') : raw;
+  const s = r.replace(/[$,\s%]/g, '').replace(/[−–]/g, '-');
   const f = /^(-?)(\d+)\/(\d+)$/.exec(s);
   if (f) {
     const n = Number(f[2]);
@@ -1736,4 +1754,15 @@ export function diagnose(task, raw) {
   if (task.answer !== 0 && Math.abs(v + task.answer) < 1e-9) return 'So close. Check the sign: should it be positive or negative?';
   if (task.answer !== 0 && [10, 100, 0.1, 0.01].some((f) => Math.abs(v - task.answer * f) < 1e-9)) return 'The digits are right. Check where the decimal point goes.';
   return null;
+}
+
+// The same feedback in Spanish, for the "Ver en español" help. Falls back to English for any line
+// that has no Spanish yet, so a student never sees an empty message.
+export function diagnoseEs(task, raw) {
+  const en = diagnose(task, raw);
+  if (!en) return null;
+  if (NOTES_ES[en]) return NOTES_ES[en];
+  const v = gradeAnswer(task, raw).parsed?.value;
+  const i = (task.mistakes || []).findIndex((m) => Math.abs(m.value - v) < 1e-9);
+  return (i >= 0 && task.es?.mistakes?.[i]?.text) || en;
 }
