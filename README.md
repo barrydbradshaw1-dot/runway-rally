@@ -200,6 +200,12 @@ Off by default. A teacher turns it on per class in the console (Class data, "Tur
 - Numbers keep US style in both languages (12.50, 1,500), as in Mexico and Central America. A student who types a decimal comma (2,5) is read as 2.5; 1,200 still means twelve hundred.
 - The Spanish was machine-drafted (Nov 2026) and needs a bilingual math teacher's review before students rely on it.
 
+## Answer sounds
+
+When a student checks an answer they hear a soft two-note chime if it is right, or a low, gentle two-note dip if it is not (it means "try again", not a buzzer). Number pad keys make a tiny tick. Skills-check answers get only the tick, so the check still gives nothing away.
+
+All sounds are made in code with Web Audio (`web/sound.js`): no sound files, nothing loaded from another site, nothing to license. Each lasts under half a second and stays quiet. A "🔊 Sound on / 🔇 Sound off" switch sits in the top bar of the practice, answer and skills-check screens ("Con sonido / Sin sonido" when the student is viewing Spanish), and the choice is remembered on that device. If a browser blocks sound or has no Web Audio, play simply carries on without it.
+
 ## Teachers, classes and deleting data
 
 - **Owner:** whoever holds `ADMIN_TOKEN`. Signs in to `/admin/` with it, adds teachers (each gets a key shown once), issues a teacher a new key, removes a teacher, and sees every class.

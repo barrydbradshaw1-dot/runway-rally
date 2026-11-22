@@ -2,6 +2,7 @@
 import { drawAvatar } from './avatar.js';
 import { CHOICES, DETAILS, DEFAULT_LOOK, STYLES, HAIR_STYLES, cleanLook, pick } from './look.js';
 import { SLOTS, SKILL_ITEMS, REWARD_ITEMS, itemById, colorHex, colorName } from './items.js';
+import { createSounds, soundOn, SOUND_KEY } from './sound.js';
 const app = document.getElementById('app');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -45,6 +46,9 @@ const store = {
     }
   },
 };
+
+// Answer sounds (see sound.js). On unless the student switched them off on this device.
+const sounds = createSounds({ isOn: () => soundOn((k) => store.get(k)) });
 
 // Brightspace launches hand the session over in the URL fragment (never sent to a server or logged).
 const launched = /^#lti=([A-Za-z0-9_-]{20,64})$/.exec(location.hash);
@@ -121,6 +125,25 @@ function esToggle(redraw) {
       redraw();
     },
   });
+}
+
+// Sound on/off switch for the answer screens. Remembered on this device.
+function soundToggle() {
+  const btn = h('button', { class: 'ghost sound-toggle' });
+  const label = () => {
+    const on = soundOn((k) => store.get(k));
+    btn.setAttribute('aria-pressed', String(on));
+    btn.setAttribute('aria-label', L('Sound effects', 'Efectos de sonido'));
+    btn.textContent = on ? L('🔊 Sound on', '🔊 Con sonido') : L('🔇 Sound off', '🔇 Sin sonido');
+  };
+  btn.addEventListener('click', (e) => {
+    store.set(SOUND_KEY, soundOn((k) => store.get(k)) ? '0' : '1');
+    label();
+    sounds.play('tap'); // a tick so turning sound on is heard right away
+    if (e.detail) btn.blur();
+  });
+  label();
+  return btn;
 }
 
 // The problem in Spanish with the English under it, or just the English.
@@ -574,7 +597,10 @@ function numberPad(onChange) {
     if (k === '/' && (cur.includes('/') || cur.includes('.') || !/[0-9]$/.test(cur))) return;
     setInput(cur + k);
   };
-  const key = (label, k, aria) => h('button', { 'aria-label': aria || label, onclick: (e) => { press(k); if (e.detail) e.currentTarget.blur(); }, text: label });
+  const tap = () => {
+    if (!state.busy) sounds.play('tap');
+  };
+  const key = (label, k, aria) => h('button', { 'aria-label': aria || label, onclick: (e) => { tap(); press(k); if (e.detail) e.currentTarget.blur(); }, text: label });
   const pad = h(
     'div',
     { class: 'pad' },
@@ -587,6 +613,7 @@ function numberPad(onChange) {
     h('button', {
       text: L('Clear', 'Borrar'),
       onclick: (e) => {
+        tap();
         if (!state.busy) setInput('');
         if (e.detail) e.currentTarget.blur();
       },
@@ -634,11 +661,13 @@ function taskScreen() {
     text: L('Check', 'Revisar'),
     onclick: async () => {
       if (!state.input || state.busy) return;
+      sounds.wake(); // browsers allow sound only from a tap, so wake it now, before waiting on the server
       state.busy = true;
       check.disabled = true;
       try {
         const r = await api('/api/answer', { method: 'POST', body: { taskId: t.id, answer: state.input } });
         state.student = r.student;
+        sounds.play(r.correct ? 'right' : 'wrong');
         if (r.retry) {
           display.classList.add('shake');
           setTimeout(() => display.classList.remove('shake'), 400);
@@ -668,7 +697,7 @@ function taskScreen() {
       : null;
 
   const nodes = [
-    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Pause', '← Pausa'), onclick: () => homeScreen() }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })),
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Pause', '← Pausa'), onclick: () => homeScreen() }), h('div', { class: 'row' }, soundToggle(), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` }))),
     dots,
     storyNode(),
     h(
@@ -739,7 +768,7 @@ function placementScreen() {
   notSure.style.flex = '1';
   const formTip = t.requireFraction ? L('Answer as a fraction, like 3/4.', 'Responde con una fracción, como 3/4.') : null;
   show(
-    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Later', '← Después'), onclick: () => homeScreen() }), h('div', { class: 'pill', text: L(`Skills check · ${t.number}`, `Prueba de habilidades · ${t.number}`) })),
+    h('div', { class: 'topbar' }, h('button', { class: 'ghost', text: L('← Later', '← Después'), onclick: () => homeScreen() }), h('div', { class: 'row' }, soundToggle(), h('div', { class: 'pill', text: L(`Skills check · ${t.number}`, `Prueba de habilidades · ${t.number}`) }))),
     t.number === 1
       ? h('p', { class: 'story center', text: L('No hints, no score, nothing to lose. Skip anything you have not learned yet.', 'Sin pistas, sin puntos, nada que perder. Salta lo que todavía no hayas aprendido.') })
       : null,
@@ -785,7 +814,7 @@ function resultScreen(r) {
   ];
   for (const u of r.unlocked) kids.push(h('div', { class: 'unlock pop', text: `New item unlocked: ${u.name}` }));
   for (const k of r.newlyUnlockedSkills || []) kids.push(h('div', { class: 'unlock pop', text: `New skill opened: ${names[k]}` }));
-  const nodes = [h('div', { class: 'topbar' }, h('div', { class: 'pill', text: state.student.nickname }), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` })), ...kids];
+  const nodes = [h('div', { class: 'topbar' }, h('div', { class: 'pill', text: state.student.nickname }), h('div', { class: 'row' }, soundToggle(), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` }))), ...kids];
   if (r.unlocked.length) nodes.push(h('div', { class: 'card avatar-wrap' }, avatar()));
   const next = h('button', {
     class: 'primary',

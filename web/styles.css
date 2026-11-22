@@ -89,7 +89,7 @@ label { display: grid; gap: 6px; font-weight: 600; }
 .error { color: var(--danger); font-weight: 600; min-height: 1.3em; }
 
 /* top bar */
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .pill {
   background: #fff;
   border-radius: 999px;
@@ -236,3 +236,4 @@ button.danger { background: var(--danger); color: #fff; }
 
 /* Spanish help: "Ver en español" sits at the top right of the problem card */
 .lang-toggle { align-self: flex-end; font-size: 0.9rem; padding: 0.25rem 0.6rem; }
+.sound-toggle { font-size: 0.9rem; padding: 8px 10px; min-height: 44px; white-space: nowrap; }
