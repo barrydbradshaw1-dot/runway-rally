@@ -200,6 +200,25 @@ Off by default. A teacher turns it on per class in the console (Class data, "Tur
 - Numbers keep US style in both languages (12.50, 1,500), as in Mexico and Central America. A student who types a decimal comma (2,5) is read as 2.5; 1,200 still means twelve hundred.
 - The Spanish was machine-drafted (Nov 2026) and needs a bilingual math teacher's review before students rely on it.
 
+## Homework practice (teacher assignments)
+
+A teacher can turn their own assignment into a commission. In the teacher console, open a class and use **Homework practice → Add an assignment**: type each problem and its answer, or (when photo reading is on) take a photo of a blank copy and let the AI find the problems. The teacher checks every question, answer and skill before saving, and ticks "Students can see it now" when it is ready. Students see it under "From your teacher" on their home screen and play it like any commission, with the same hints and rewards.
+
+- Only problems with a single-number answer (12, -3, 4.5, 3/4) can be practiced. Word answers, drawings and multi-part answers are listed as left out.
+- The server rechecks the arithmetic the AI wrote down and flags any answer that does not match, or that the AI marked as unsure.
+- A student's game uses a copy of the problems, so editing or hiding an assignment never breaks a game in progress.
+- Up to 30 assignments per class and 25 problems per assignment.
+
+**Photo reading is off until you add a key.** Typing problems works without it. To turn photos on, add these to `.env` and run the deploy again:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+# optional: HOMEWORK_AI_MODEL=claude-sonnet-5-5
+# optional: HOMEWORK_DAILY_LIMIT=200
+```
+
+Each photo is one call to Anthropic's API (roughly 1 to 3 cents a page on Claude Sonnet 5.5), billed to the key's account. `HOMEWORK_DAILY_LIMIT` caps photos per day for the whole server (default 200), and each teacher can read at most 20 photos in 10 minutes. The photo is never saved or logged; the audit log records only how many problems were found. Before turning it on, check Anthropic's commercial data terms (retention and training) and add the AI provider to the school security plan.
+
 ## Answer sounds
 
 When a student checks an answer they hear a soft two-note chime if it is right, or a low, gentle two-note dip if it is not (it means "try again", not a buzzer). Number pad keys make a tiny tick. Skills-check answers get only the tick, so the check still gives nothing away.

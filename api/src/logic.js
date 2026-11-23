@@ -133,6 +133,7 @@ export function publicStudent(s) {
       theme: s.commission.theme,
       done: s.commission.done,
       total: s.commission.total,
+      fromTeacher: s.commission.assignment ? s.commission.assignment.title : null,
     },
   };
 }
@@ -163,10 +164,61 @@ export function startCommission(student, { theme, rng, now = Date.now(), es = fa
   return { story: storyFor(skill), repair, ...(es ? { storyEs: storyForEs(skill) } : {}) };
 }
 
+// A commission made from the teacher's own assignment (see homework.js). The problems are copied into
+// the commission, so the teacher can edit or remove the assignment without breaking a game in progress.
+export function startAssignment(student, assignment, { now = Date.now() } = {}) {
+  applyFade(student, now);
+  const problems = assignment.problems.slice(0, 25).map((p) => ({ ...p, hints: [...p.hints] }));
+  student.commission = {
+    id: randomUUID(),
+    skill: problems[0].skill,
+    theme: 'runway',
+    total: problems.length,
+    done: 0,
+    correct: 0,
+    repair: false,
+    startMastery: { ...student.mastery },
+    assignment: { id: assignment.id, title: assignment.title, problems },
+  };
+  const n = problems.length;
+  return { story: `Your teacher sent this one: ${assignment.title}. ${n === 1 ? 'One problem' : `${n} problems`}, same rewards as any commission.` };
+}
+
+function assignmentTask(student, c) {
+  const p = c.assignment.problems[c.done];
+  return {
+    id: randomUUID(),
+    studentId: student.id,
+    commissionId: c.id,
+    skill: p.skill,
+    level: 2,
+    theme: c.theme,
+    prompt: p.prompt,
+    answer: p.answer,
+    answerText: p.answerText,
+    form: p.form,
+    requireFraction: p.requireFraction,
+    simplest: p.simplest,
+    hints: p.hints,
+    mistakes: [],
+    review: false,
+    example: null,
+    fromTeacher: true,
+    attempts: 0,
+    hintLevel: 0,
+    answered: false,
+  };
+}
+
 // Returns the full task (with answer) for the server to store. Use publicTask() for the client.
 export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
   const c = student.commission;
   if (!c) throw new Error('no active commission');
+  if (c.assignment) {
+    const task = assignmentTask(student, c);
+    student.currentTaskId = task.id;
+    return task;
+  }
   // Mid-commission repair: repeated failure steps back to the weakest prerequisite.
   if ((student.wrongStreak[c.skill] || 0) >= 3) {
     const pre = weakestPrereq(c.skill, student.mastery);
@@ -224,6 +276,7 @@ export function publicTask(task, commission) {
     review: Boolean(task.review),
     example: task.example || null,
     placement: Boolean(task.placement),
+    fromTeacher: Boolean(task.fromTeacher),
     number: task.placement ? task.placementNumber : commission.done + 1,
     of: task.placement ? null : commission.total,
     // Spanish help, only when the class has it turned on
@@ -327,7 +380,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
 
   if (c.done >= c.total) {
     const gain = Object.keys(student.mastery).reduce((sum, k) => sum + Math.max(0, student.mastery[k] - (c.startMastery?.[k] ?? student.mastery[k])), 0);
-    const earned = c.correct >= REWARD_MIN_CORRECT || gain >= REWARD_MIN_GAIN;
+    const earned = c.correct >= Math.min(REWARD_MIN_CORRECT, c.total) || gain >= REWARD_MIN_GAIN;
     const bonus = c.correct >= 4 ? 10 : 0;
     student.thread += bonus;
     student.stats.commissions += 1;

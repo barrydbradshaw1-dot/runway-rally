@@ -61,6 +61,7 @@ const state = {
   token: store.get('rr_token'),
   student: null,
   catalog: null,
+  assignments: [],
   task: null,
   story: '',
   storyEs: '',
@@ -328,6 +329,7 @@ async function loadState() {
   const r = await api('/api/state');
   state.student = r.student;
   state.catalog = r.catalog;
+  state.assignments = r.assignments || []; // homework practice the teacher has turned on for the class
 }
 
 async function homeScreen() {
@@ -337,9 +339,9 @@ async function homeScreen() {
     return loginScreen(e.message);
   }
   const st = state.student;
-  const start = async (theme) => {
+  const start = async (theme, assignmentId) => {
     try {
-      const r = await api('/api/commission/start', { method: 'POST', body: theme ? { theme } : {} });
+      const r = await api('/api/commission/start', { method: 'POST', body: assignmentId ? { assignmentId } : theme ? { theme } : {} });
       state.student = r.student;
       state.task = r.task;
       state.story = r.resumed ? '' : r.repair ? 'Let us warm up with a building-block skill first. It will make the next one easier.' : r.story;
@@ -405,7 +407,19 @@ async function homeScreen() {
         )
       : null,
     h('div', { class: 'card avatar-wrap pop' }, avatar()),
-    st.commission ? h('button', { class: 'primary', onclick: () => start(null), text: `Continue commission (${st.commission.done}/${st.commission.total})` }) : null,
+    st.commission
+      ? h('button', { class: 'primary', onclick: () => start(null), text: st.commission.fromTeacher ? `Continue ${st.commission.fromTeacher} (${st.commission.done}/${st.commission.total})` : `Continue commission (${st.commission.done}/${st.commission.total})` })
+      : null,
+    // the teacher's own assignments, turned into commissions (same scoring and rewards)
+    state.assignments.length
+      ? h(
+          'div',
+          { class: 'card stack callout' },
+          h('h3', { text: 'From your teacher' }),
+          h('p', { class: 'muted', text: 'Practice the problems your teacher picked. They count like any commission.' }),
+          state.assignments.map((a) => h('button', { onclick: () => start(null, a.id), text: `📝 ${a.title} (${a.count} ${a.count === 1 ? 'problem' : 'problems'})` })),
+        )
+      : null,
     h('h2', { text: 'Start a commission' }),
     st.reviewsDue > 0 ? h('p', { class: 'muted', text: `${st.reviewsDue === 1 ? 'One skill is' : `${st.reviewsDue} skills are`} ready for a quick review. They will show up in your next commission.` }) : null,
     h(
@@ -705,6 +719,7 @@ function taskScreen() {
       { class: 'card stack pop' },
       esToggle(taskScreen),
       t.review ? h('span', { class: 'badge', text: L('Quick review', 'Repaso rápido') }) : null,
+      t.fromTeacher ? h('span', { class: 'badge', text: L('From your teacher', 'De tu docente') }) : null,
       ...promptNodes(t.prompt, t.es?.prompt),
       formTip ? h('p', { class: 'muted small', text: formTip }) : null,
       speak,
