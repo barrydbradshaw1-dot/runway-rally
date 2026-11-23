@@ -723,6 +723,37 @@ const atWrist = (t, kids) => {
 };
 const ring = (stroke, w = 2, extra = {}) => el('ellipse', { cx: 0, cy: 0, rx: 8, ry: 2.8, fill: 'none', stroke, 'stroke-width': w, ...extra });
 
+// ---------- shine and sparkle ----------
+// A four-point twinkle star. Pale gold with a thin gold edge, so it shows on light and dark fabric.
+const sparkle = (x, y, r, o = 0.95) =>
+  el('path', {
+    d: `M${x} ${y - r} Q${x} ${y} ${x + r} ${y} Q${x} ${y} ${x} ${y + r} Q${x} ${y} ${x - r} ${y} Q${x} ${y} ${x} ${y - r} Z`,
+    fill: '#fffbea',
+    stroke: GOLD,
+    'stroke-width': 0.5,
+    'stroke-linejoin': 'round',
+    opacity: o,
+    class: 'twinkle',
+  });
+const gloss = (d, w, o) => el('path', { d, fill: 'none', stroke: '#ffffff', 'stroke-width': w, 'stroke-linecap': 'round', opacity: o });
+
+// A soft sheen down the left of the outfit and a few small sparkles, over whatever is worn.
+const clothesShine = () => [
+  gloss('M80 156 Q76 170 78 188', 3, 0.35),
+  gloss('M79.5 194 L79 198', 3, 0.35),
+  sparkle(119, 162, 3.6),
+  sparkle(88, 182, 2.8, 0.85),
+  sparkle(115, 199, 3.2, 0.9),
+];
+
+// Shoes get a glossy toe and the most sparkle.
+const shoeShine = () => [
+  ...[89, 111].flatMap((cx) => [gloss(`M${cx - 8} 265.5 Q${cx - 4} 262.5 ${cx + 1} 263`, 2, 0.8), gloss(`M${cx + 5} 264 L${cx + 6} 264.4`, 2, 0.8)]),
+  sparkle(124, 259, 3.6),
+  sparkle(76, 263, 2.8),
+  sparkle(100, 274, 2.2, 0.9),
+];
+
 const feet = (draw) => [89, 111].flatMap((cx) => draw(cx));
 const sole = (cx, y = 270) => el('rect', { x: cx - 13, y, width: 26, height: 4, rx: 2, fill: '#ffffff' });
 
@@ -1002,6 +1033,7 @@ export function drawAvatar(rawLook, owned = [], { view = 'full', hideHair = fals
   L.push(el('rect', { x: 104, y: 214, width: 14, height: 50, rx: 6, fill: sk.base }));
   if (on.get('shoes')) L.push(...art('shoes'));
   else for (const cx of [89, 111]) L.push(el('ellipse', { cx, cy: 268, rx: 13, ry: 7, fill: '#ff7ac6' }));
+  L.push(...shoeShine());
   for (const side of ['L', 'R']) {
     L.push(line(...ARM[side], sk.base, 12));
     const [hx, hy] = along(ARM[side], 1.08);
@@ -1017,6 +1049,7 @@ export function drawAvatar(rawLook, owned = [], { view = 'full', hideHair = fals
   L.push(...art('dress'), ...art('outer'), ...art('wrist'));
   headwearDrape(head.id, hwColor, L);
   if (head.id !== 'hijab') L.push(...art('scarf'), ...art('neck'));
+  L.push(...clothesShine());
   L.push(...art('bag'));
 
   // ears, head, face
