@@ -104,7 +104,7 @@ export function cleanNickname(raw, env = process.env) {
 
 // The privacy policy a teacher agrees to when making a class. Change it when the policy changes,
 // so the console can ask teachers to look again.
-export const POLICY_VERSION = '2026-11-18';
+export const POLICY_VERSION = '2026-11-23';
 
 export function cleanClassCode(raw) {
   if (typeof raw !== 'string') return null;
