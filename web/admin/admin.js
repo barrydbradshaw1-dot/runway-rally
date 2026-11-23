@@ -365,6 +365,233 @@ function managePanel() {
   );
 }
 
+// ---------- homework practice: the teacher's own assignments as commissions ----------
+const classPath = () => `/api/admin/class/${encodeURIComponent(state.code)}`;
+
+function homeworkPanel() {
+  const { assignments = [], homework = {} } = state.data;
+  const setLive = async (a, live) => {
+    try {
+      await api(`${classPath()}/assignments/${a.id}`, { method: 'PATCH', body: { live } });
+      await reload();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  const remove = async (a) => {
+    if (!confirm(`Delete "${a.title}"? Students who are partway through it can still finish.`)) return;
+    try {
+      await api(`${classPath()}/assignments/${a.id}`, { method: 'DELETE' });
+      await reload();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  return h(
+    'section',
+    { class: 'panel', 'aria-labelledby': 'hw-h' },
+    h('div', { class: 'toolbar' }, h('h2', { id: 'hw-h', text: 'Homework practice' }), h('button', { class: 'primary', text: 'Add an assignment', onclick: () => assignmentScreen(null) })),
+    h('p', {
+      class: 'muted',
+      text: homework.photos
+        ? 'Turn your own assignment into a commission: take a photo of a blank copy, or type the problems in. You check every problem and answer before students see it.'
+        : 'Turn your own assignment into a commission by typing the problems in. You check every problem and answer before students see it.',
+    }),
+    assignments.length
+      ? h(
+          'div',
+          { class: 'tablewrap' },
+          h(
+            'table',
+            { class: 'plain' },
+            h('thead', {}, h('tr', {}, h('th', { text: 'Assignment' }), h('th', { text: 'Problems' }), h('th', { text: 'Students see it' }), h('th', { text: '' }))),
+            h(
+              'tbody',
+              {},
+              assignments.map((a) =>
+                h(
+                  'tr',
+                  {},
+                  h('td', { text: a.title }),
+                  h('td', { text: String(a.problems.length) }),
+                  h('td', {}, h('span', { class: a.live ? 'chip' : 'chip idle', text: a.live ? 'Yes' : 'Hidden' })),
+                  h(
+                    'td',
+                    { class: 'rowactions' },
+                    h('button', { class: 'ghost small', text: a.live ? 'Hide' : 'Show to students', onclick: () => setLive(a, !a.live) }),
+                    h('button', { class: 'ghost small', text: 'Edit', onclick: () => assignmentScreen(a) }),
+                    h('button', { class: 'ghost small', text: 'Delete', 'aria-label': `Delete ${a.title}`, onclick: () => remove(a) }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+      : h('p', { class: 'empty', text: 'No assignments yet.' }),
+  );
+}
+
+// Shrinks a photo in the browser before it is sent (about 1,600 pixels on the long side is plenty to read).
+function shrinkPhoto(file, max = 1600) {
+  return new Promise((resolveP, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolveP(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('That file could not be opened as a picture.'));
+    };
+    img.src = url;
+  });
+}
+
+function assignmentScreen(existing) {
+  clearInterval(state.timer); // the class page refreshes itself; this screen must not be wiped mid-edit
+  const { skills, skillInfo = {}, homework = {} } = state.data;
+  const draft = existing
+    ? { title: existing.title, live: existing.live, problems: existing.problems.map((p) => ({ ...p, hints: [...(p.hints || [])], flag: null })) }
+    : { title: '', live: false, problems: [] };
+  const skillIds = Object.keys(skills).sort((a, b) => (skillInfo[a]?.grade ?? 0) - (skillInfo[b]?.grade ?? 0));
+  const blank = () => ({ prompt: '', answer: '', skill: '', hints: ['', '', ''], flag: null });
+  if (!draft.problems.length) draft.problems.push(blank());
+
+  const list = h('div', { class: 'stack' });
+  const found = h('div', { class: 'stack' });
+  const err = h('p', { class: 'error', role: 'alert' });
+
+  function problemCard(p, k) {
+    const prompt = h('textarea', { rows: '2', maxlength: '400', 'aria-label': `Problem ${k + 1} question` });
+    prompt.value = p.prompt;
+    prompt.addEventListener('input', () => (p.prompt = prompt.value));
+    const answer = h('input', { type: 'text', maxlength: '20', inputmode: 'decimal', placeholder: '12, -3, 4.5 or 3/4', 'aria-label': `Problem ${k + 1} answer` });
+    answer.value = p.answer;
+    answer.addEventListener('input', () => (p.answer = answer.value));
+    const skill = h(
+      'select',
+      { 'aria-label': `Problem ${k + 1} skill` },
+      h('option', { value: '', text: 'Pick the skill…' }),
+      skillIds.map((id) => h('option', { value: id, text: `${skills[id]}${skillInfo[id] ? ` (grade ${skillInfo[id].grade})` : ''}`, selected: p.skill === id })),
+    );
+    skill.addEventListener('change', () => (p.skill = skill.value));
+    const hints = [0, 1, 2].map((j) => {
+      const inp = h('input', { type: 'text', maxlength: '200', placeholder: j === 2 ? 'Last hint: gives the answer (filled in if blank)' : `Hint ${j + 1} (optional)`, 'aria-label': `Problem ${k + 1} hint ${j + 1}` });
+      inp.value = p.hints[j] || '';
+      inp.addEventListener('input', () => (p.hints[j] = inp.value));
+      return inp;
+    });
+    return h(
+      'div',
+      { class: 'problem' },
+      h(
+        'div',
+        { class: 'toolbar' },
+        h('strong', { text: `Problem ${k + 1}` }),
+        p.flag ? h('span', { class: 'chip warn', text: p.flag }) : null,
+        h('button', {
+          class: 'ghost small',
+          text: 'Remove',
+          onclick: () => {
+            draft.problems.splice(k, 1);
+            renderList();
+          },
+        }),
+      ),
+      h('label', {}, 'Question', prompt),
+      h('div', { class: 'row' }, h('label', {}, 'Answer', answer), h('label', { class: 'grow' }, 'Skill it practices', skill)),
+      h('details', {}, h('summary', { text: 'Hints (students see them one at a time)' }), h('div', { class: 'stack' }, hints)),
+    );
+  }
+  function renderList() {
+    list.replaceChildren(...draft.problems.map(problemCard));
+  }
+
+  const photoInput = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+  const photoBtn = h('button', { text: '📷 Read a photo of the assignment', onclick: () => photoInput.click() });
+  photoInput.addEventListener('change', async () => {
+    const file = photoInput.files?.[0];
+    photoInput.value = '';
+    if (!file) return;
+    photoBtn.disabled = true;
+    photoBtn.textContent = 'Reading the photo…';
+    found.replaceChildren();
+    try {
+      const image = await shrinkPhoto(file);
+      const r = await api(`${classPath()}/homework/read`, { method: 'POST', body: { image } });
+      // drop the empty starter problem, then add what was read
+      draft.problems = draft.problems.filter((p) => p.prompt.trim() || p.answer.trim());
+      draft.problems.push(...r.problems);
+      renderList();
+      found.replaceChildren(
+        ...[
+          h('p', { class: 'notice', text: r.problems.length ? `Found ${r.problems.length} ${r.problems.length === 1 ? 'problem' : 'problems'}. Check each question, answer and skill below. Ones with a note need a closer look.` : 'No problems with a single-number answer were found on that photo.' }),
+          r.note ? h('p', { class: 'muted', text: r.note }) : null,
+          r.skipped.length
+            ? h('details', {}, h('summary', { text: `${r.skipped.length} left out (they need words, a drawing or more than one answer)` }), h('ul', {}, r.skipped.map((s) => h('li', { text: `${s.text}: ${s.reason}` }))))
+            : null,
+        ].filter(Boolean),
+      );
+    } catch (e) {
+      found.replaceChildren(h('p', { class: 'error', text: e.message }));
+    }
+    photoBtn.disabled = false;
+    photoBtn.textContent = '📷 Read a photo of the assignment';
+  });
+
+  const title = h('input', { type: 'text', maxlength: '60', placeholder: 'Tuesday homework, page 42', 'aria-label': 'Assignment name' });
+  title.value = draft.title;
+  title.addEventListener('input', () => (draft.title = title.value));
+  const live = h('input', { type: 'checkbox', id: 'hw-live', checked: draft.live });
+  live.addEventListener('change', () => (draft.live = live.checked));
+
+  const save = h('button', {
+    class: 'primary',
+    text: existing ? 'Save changes' : 'Save assignment',
+    onclick: async () => {
+      err.textContent = '';
+      save.disabled = true;
+      const body = { title: draft.title, live: draft.live, problems: draft.problems.map(({ prompt, answer, skill, hints }) => ({ prompt, answer, skill, hints })) };
+      try {
+        if (existing) await api(`${classPath()}/assignments/${existing.id}`, { method: 'PUT', body });
+        else await api(`${classPath()}/assignments`, { method: 'POST', body });
+        await reload();
+      } catch (e) {
+        err.textContent = e.message;
+        save.disabled = false;
+      }
+    },
+  });
+
+  renderList();
+  show(
+    h('div', { class: 'head' }, h('h1', { text: existing ? 'Edit assignment' : 'Add an assignment' }), h('div', { class: 'actions' }, h('button', { class: 'ghost', text: 'Back to the class', onclick: () => reload() }))),
+    h(
+      'section',
+      { class: 'panel hwform' },
+      h('label', {}, 'Name students will see', title),
+      homework.photos
+        ? h(
+            'div',
+            { class: 'stack' },
+            h('div', { class: 'row' }, photoBtn, photoInput),
+            h('p', { class: 'muted', text: 'Use a photo of a blank copy, with no student names or work on it. The photo is sent once to our AI provider to find the problems, and is not kept. Only problems with a single-number answer can be practiced.' }),
+            found,
+          )
+        : h('p', { class: 'muted', text: 'Type each problem and its answer. Only problems with a single-number answer (like 12, -3, 4.5 or 3/4) can be practiced.' }),
+    ),
+    list,
+    h('div', { class: 'row' }, h('button', { text: '+ Add a problem', onclick: () => { draft.problems.push(blank()); renderList(); } })),
+    h('section', { class: 'panel' }, h('label', { class: 'check', for: 'hw-live' }, live, h('span', { text: 'Students can see it now (you can hide it again anytime)' })), err, h('div', { class: 'row' }, save)),
+  );
+}
+
 const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const pct = (m) => `${Math.round(m * 100)}%`;
 const cls = (m, started) => (!started ? 'none' : m < 0.35 ? 'low' : m < 0.6 ? 'mid' : 'high');
@@ -490,6 +717,7 @@ function dashboard() {
       students.length ? h('div', { class: 'tablewrap' }, table) : h('p', { class: 'empty', text: title ? 'No students have opened Runway Rally yet. They launch it from your Brightspace course.' : `No students have joined ${classCode} yet. Share the class code with your class.` }),
       h('div', { class: 'legend' }, h('span', { class: 'l1', text: 'Below 35%' }), h('span', { class: 'l2', text: '35% to 59%' }), h('span', { class: 'l3', text: '60% and up' }), h('span', { text: 'Percentages are shown in every cell, not just color' })),
     ),
+    homeworkPanel(),
     managePanel(),
   );
 

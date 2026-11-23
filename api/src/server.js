@@ -11,11 +11,13 @@ import { recordInterest } from './adaptive.js';
 import { loadLtiConfig } from './lti/config.js';
 import { createLtiService } from './lti/lti.js';
 import { LtiError } from './lti/jwt.js';
+import { homeworkConfig, makePhotoReader, ReadError, cleanImage, draftFromReading, cleanAssignment, assignmentOut, assignmentBrief, MAX_ASSIGNMENTS } from './homework.js';
 import {
   ITEMS,
   newStudent,
   publicStudent,
   startCommission,
+  startAssignment,
   nextTask,
   publicTask,
   giveHint,
@@ -119,7 +121,7 @@ class HttpError extends Error {
   }
 }
 
-export function createApp({ store = makeStore(), env = process.env, seed, fetchImpl, now } = {}) {
+export function createApp({ store = makeStore(), env = process.env, seed, fetchImpl, now, readPhoto } = {}) {
   const rng = seed === undefined ? () => Math.random() : mulberry32(seed);
   const webDir = resolve(env.WEB_DIR || fileURLToPath(new URL('../../web', import.meta.url)));
   const production = env.NODE_ENV === 'production';
@@ -135,6 +137,10 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return Number.isInteger(n) && Math.abs(n) <= 840 ? n : 0;
   };
   const retention = retentionConfig(env);
+  // Homework practice: reading a photo of an assignment needs ANTHROPIC_API_KEY (see homework.js).
+  const homework = homeworkConfig(env);
+  const photoReader = readPhoto || (homework.photos ? makePhotoReader({ apiKey: env.ANTHROPIC_API_KEY, model: homework.model }) : null);
+  const photoDay = { day: '', n: 0 };
   const nicknameExtra = extraBlocklist(env);
   const nicknameOf = (raw) => {
     const r = checkNickname(raw, { extra: nicknameExtra });
@@ -209,12 +215,12 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
   const clientIp = (req) =>
     (trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
 
-  async function readJson(req) {
+  async function readJson(req, limit = 10_000) {
     const chunks = [];
     let size = 0;
     for await (const c of req) {
       size += c.length;
-      if (size > 10_000) throw new HttpError(413, 'request too large');
+      if (size > limit) throw new HttpError(413, 'request too large');
       chunks.push(c);
     }
     if (!size) return {};
@@ -298,6 +304,13 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return c?.spanish === true;
   }
 
+  // The teacher's assignments that students can play right now (titles only, no problems).
+  async function liveAssignments(student) {
+    if (!student.classCode) return [];
+    const c = await store.getClass(student.classCode);
+    return (c?.assignments || []).filter((a) => a.live === true).map(assignmentBrief);
+  }
+
   async function taskFor(student) {
     if (!student.commission || !student.currentTaskId) return null;
     const task = await store.getTask(student.currentTaskId);
@@ -353,6 +366,87 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       return send(res, 200, progressSummary(found, { now: clock(), tz: tzOf(req) }));
     }
 
+    // ----- homework practice: the teacher's own assignments (see homework.js) -----
+    //   POST   /api/admin/class/CODE/homework/read         read a photo of a blank assignment (nothing is kept)
+    //   POST   /api/admin/class/CODE/assignments           save a new assignment
+    //   PUT    /api/admin/class/CODE/assignments/ID        replace one
+    //   PATCH  /api/admin/class/CODE/assignments/ID        { live } shows or hides it for students
+    //   DELETE /api/admin/class/CODE/assignments/ID
+    {
+      const m = /^\/api\/admin\/class\/([^/]+)\/(homework\/read|assignments)(?:\/([0-9a-f-]{36}))?$/.exec(path);
+      if (m) {
+        if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+        const who = await requireTeacher(req);
+        const code = cleanClassCode(decodeURIComponent(m[1]));
+        if (!code) throw new HttpError(400, 'bad class code');
+        if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+        if (!(await store.getClass(code))) throw new HttpError(404, 'class not found');
+
+        if (m[2] === 'homework/read') {
+          if (method !== 'POST' || m[3]) throw new HttpError(404, 'not found');
+          if (!photoReader) throw new HttpError(503, 'Reading photos is turned off on this server. You can still type the problems in.');
+          // The photo stays in memory for this one request. It is never saved or logged.
+          const img = cleanImage(await readJson(req, 7_500_000));
+          if (img.error) throw new HttpError(400, img.error);
+          if (limited('photo:' + actorOf(who), 20, 10 * 60_000)) throw new HttpError(429, 'That is a lot of photos at once. Wait a few minutes and try again.');
+          const today = isoDay(clock());
+          if (photoDay.day !== today) Object.assign(photoDay, { day: today, n: 0 });
+          if (photoDay.n >= homework.dailyLimit) throw new HttpError(429, 'Photo reading has reached its limit for today. You can still type the problems in.');
+          photoDay.n += 1;
+          let reading;
+          try {
+            reading = await photoReader(img);
+          } catch (err) {
+            if (err instanceof ReadError) throw new HttpError(422, err.message);
+            console.error('photo reading failed', err?.status ?? '', err?.name ?? '');
+            throw new HttpError(502, 'The photo could not be read right now. Try again in a minute, or type the problems in.');
+          }
+          const draft = draftFromReading(reading);
+          await store.addAudit(actorOf(who), 'read_homework_photo', { classCode: code, problems: draft.problems.length });
+          return send(res, 200, draft);
+        }
+
+        return withLock('class:' + code, async () => {
+          const cls = await store.getClass(code);
+          const list = Array.isArray(cls.assignments) ? cls.assignments : [];
+          const at = new Date(clock()).toISOString();
+          if (!m[3]) {
+            if (method !== 'POST') throw new HttpError(405, 'method not allowed');
+            if (list.length >= MAX_ASSIGNMENTS) throw new HttpError(409, `A class can have up to ${MAX_ASSIGNMENTS} assignments. Delete an old one first.`);
+            const r = cleanAssignment(await readJson(req, 200_000));
+            if (r.error) throw new HttpError(400, r.error);
+            const a = { id: randomUUID(), ...r.assignment, createdAt: at, updatedAt: at };
+            await store.upsertClass(code, { assignments: [a, ...list] });
+            await store.addAudit(actorOf(who), 'add_assignment', { classCode: code, problems: a.problems.length });
+            return send(res, 201, { assignment: assignmentOut(a) });
+          }
+          const k = list.findIndex((a) => a.id === m[3]);
+          if (k < 0) throw new HttpError(404, 'that assignment was not found');
+          if (method === 'DELETE') {
+            await store.upsertClass(code, { assignments: list.filter((_, j) => j !== k) });
+            await store.addAudit(actorOf(who), 'delete_assignment', { classCode: code });
+            return send(res, 200, { deleted: true });
+          }
+          if (method === 'PATCH') {
+            const body = await readJson(req);
+            if (typeof body.live !== 'boolean') throw new HttpError(400, 'live should be true or false');
+            const a = { ...list[k], live: body.live, updatedAt: at };
+            await store.upsertClass(code, { assignments: list.map((x, j) => (j === k ? a : x)) });
+            return send(res, 200, { assignment: assignmentOut(a) });
+          }
+          if (method === 'PUT') {
+            const r = cleanAssignment(await readJson(req, 200_000));
+            if (r.error) throw new HttpError(400, r.error);
+            const a = { ...list[k], ...r.assignment, updatedAt: at };
+            await store.upsertClass(code, { assignments: list.map((x, j) => (j === k ? a : x)) });
+            await store.addAudit(actorOf(who), 'edit_assignment', { classCode: code, problems: a.problems.length });
+            return send(res, 200, { assignment: assignmentOut(a) });
+          }
+          throw new HttpError(405, 'method not allowed');
+        });
+      }
+    }
+
     if (method === 'GET' && path.startsWith('/api/admin/class/')) {
       // tighter limit than the general one so the admin token cannot be guessed quickly
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
@@ -398,6 +492,8 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         skills: CATALOG.skills,
         skillInfo: CATALOG.skillInfo,
         students: classSummary(list),
+        assignments: (cls?.assignments || []).map(assignmentOut),
+        homework: { photos: Boolean(photoReader) },
       };
       if (cls?.nrpsUrl) out.roster = await lti.rosterSummary(code, list);
       return send(res, 200, out);
@@ -570,7 +666,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       const tz = tzOf(req);
 
       if (method === 'GET' && path === '/api/state') {
-        return send(res, 200, { student: pub(student), catalog: CATALOG });
+        return send(res, 200, { student: pub(student), catalog: CATALOG, assignments: await liveAssignments(student) });
       }
 
       if (method === 'POST' && path === '/api/event') {
@@ -587,6 +683,17 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         const existing = await taskFor(student);
         if (existing) {
           return send(res, 200, { resumed: true, task: publicTask(existing, student.commission), student: pub(student) });
+        }
+        if (body.assignmentId !== undefined) {
+          const cls = student.classCode ? await store.getClass(student.classCode) : null;
+          const a = (cls?.assignments || []).find((x) => x.id === body.assignmentId && x.live === true);
+          if (!a) throw new HttpError(404, 'that assignment is not available any more');
+          const { story } = startAssignment(student, a, { now: clock() });
+          const task = nextTask(student, rng, { now: clock() });
+          await store.saveTask(task);
+          await store.saveStudent(student);
+          await store.addEvent(student.id, 'commission_start', { skill: task.skill, theme: 'runway', assignment: a.id });
+          return send(res, 200, { story, repair: false, task: publicTask(task, student.commission), student: pub(student) });
         }
         if (body.theme !== undefined && !THEMES.includes(body.theme)) throw new HttpError(400, 'unknown theme');
         const es = await spanishOn(student);
