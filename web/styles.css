@@ -158,8 +158,13 @@ label { display: grid; gap: 6px; font-weight: 600; }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 .pop { animation: pop 0.4s; }
 @keyframes pop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+/* sparkles on the big designer twinkle slowly; small pictures stay still */
+.avatar-wrap > .avatar .twinkle { animation: twinkle 2.4s ease-in-out infinite; }
+.avatar-wrap > .avatar .twinkle:nth-of-type(2n) { animation-delay: -0.8s; }
+.avatar-wrap > .avatar .twinkle:nth-of-type(3n) { animation-delay: -1.6s; }
+@keyframes twinkle { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
-  .shake, .pop { animation: none; }
+  .shake, .pop, .avatar-wrap > .avatar .twinkle { animation: none; }
   button:active { transform: none; }
 }
 
