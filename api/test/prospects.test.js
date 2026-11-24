@@ -106,7 +106,7 @@ test('the pitch names the state standards, the scores and the sender', async () 
     assert.equal(r.status, 200);
     assert.match(r.json.subject, /Capital School District/);
     assert.match(r.json.email, /^Hi Dr\. Lee,/);
-    assert.match(r.json.email, /about 21% of Capital School District's grade 6 to 8 students/);
+    assert.match(r.json.email, /about 21% of grade 6 to 8 students in Capital School District/);
     assert.match(r.json.email, /below the state's 33%/);
     assert.match(r.json.email, /Common Core State Standards for Mathematics/);
     assert.match(r.json.email, /free for teachers, \$1,500 a year per school/);
@@ -136,6 +136,9 @@ test('pitches change with how a state wrote its standards', async () => {
   const tx = buildPitch({ st: as('TX'), district });
   assert.match(tx.proposal, /Texas wrote its own math standards/);
   assert.match(tx.proposal, /crosswalk to the Texas Essential Knowledge and Skills/);
+  const fl = buildPitch({ st: as('FL'), district });
+  assert.match(fl.proposal, /How it fits Florida's B\.E\.S\.T\./);
+  assert.doesNotMatch(fl.email + fl.proposal, /the Florida's/);
   assert.doesNotMatch(tx.proposal, /6\.RP\.A\.1/);
   assert.match(tx.email, /Texas Education Code chapter 32/);
   const ga = buildPitch({ st: as('GA'), district });

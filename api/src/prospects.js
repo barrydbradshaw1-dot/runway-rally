@@ -175,6 +175,10 @@ function comparePhrase(pct, statePct) {
   return diff < 0 ? `below the state's ${statePct}%` : `above the state's ${statePct}%`;
 }
 
+// "the Ohio Learning Standards" but "Georgia's K-12 Mathematics Standards"
+export const theStandards = (st) => (/^[A-Z][A-Za-z. ]*'s /.test(st.standards) ? st.standards : `the ${st.standards}`);
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
 function list(items) {
   if (items.length <= 1) return items.join('');
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
@@ -203,7 +207,7 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
 
   const dataSentence =
     math !== null && year
-      ? `In ${year}, about ${math}% of ${mathOf}'s grade 6 to 8 students scored proficient in math on ${st.name}'s state tests${cmp ? `, ${cmp}` : ''}.`
+      ? `In ${year}, about ${math}% of grade 6 to 8 students in ${mathOf} scored proficient in math on ${st.name}'s state tests${cmp ? `, ${cmp}` : ''}.`
       : null;
   // the year before, usually the last one before the pandemic
   const prevYear = schoolYear(st.previousAssessmentYear);
@@ -216,12 +220,12 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
   const topicsShort = ['ratios and percents', 'negative numbers', 'expressions and equations', 'slope and linear functions', 'geometry', 'probability'];
   const standardsSentence =
     georgia
-      ? `It practices the grade 6 to 8 topics in ${st.standards}, and every skill is tagged with the Georgia standard it practices.`
+      ? `It practices the grade 6 to 8 topics in ${theStandards(st)}, and every skill is tagged with the Georgia standard it practices.`
       : st.basis === 'common-core'
-      ? `It practices the grade 6 to 8 topics in the ${st.standards}, and I can show you the Common Core standard behind each skill.`
+      ? `It practices the grade 6 to 8 topics in ${theStandards(st)}, and I can show you the Common Core standard behind each skill.`
       : st.basis === 'adapted'
-        ? `It practices the grade 6 to 8 topics in the ${st.standards}: ${list(topicsShort)}.`
-        : `It practices the core grade 6 to 8 topics that the ${st.standards} cover: ${list(topicsShort)}.`;
+        ? `It practices the grade 6 to 8 topics in ${theStandards(st)}: ${list(topicsShort)}.`
+        : `It practices the core grade 6 to 8 topics that ${theStandards(st)} cover: ${list(topicsShort)}.`;
 
   const privacySentence = st.privacyLaw
     ? `Students sign in with a class code and a nickname, so we never ask for their names or email addresses. There are no ads and no data sales, and we'll work through the agreement ${st.privacyLaw} calls for.`
@@ -271,17 +275,17 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
     if (facts.length) p.push(`${districtName}: ${facts.join(', ')}.`);
   }
   p.push('');
-  p.push(`How it fits the ${st.standards}`);
+  p.push(`How it fits ${theStandards(st)}`);
   if (georgia) p.push('Every built-in skill is tagged with the Georgia standard it practices:');
   else if (ccssState) p.push('Each built-in skill, with the Common Core standards it practices:');
   else if (st.basis === 'adapted') p.push(`${st.name}'s standards grew out of the Common Core, and Runway Rally's skills line up with these domains: ${list(cov.domains)}. The built-in skills are:`);
-  else p.push(`${st.name} wrote its own math standards. Runway Rally's built-in skills cover these grade 6 to 8 topics, and we can provide a skill-by-skill crosswalk to the ${st.standards} on request:`);
+  else p.push(`${st.name} wrote its own math standards. Runway Rally's built-in skills cover these grade 6 to 8 topics, and we can provide a skill-by-skill crosswalk to ${theStandards(st)} on request:`);
   for (const g of [6, 7, 8]) {
     const names = cov.byGrade[g].map((s) => (georgia && s.georgia.length ? `${s.name} (${s.georgia.join(', ')})` : ccssState && s.ccss.length ? `${s.name} (${s.ccss.join(', ')})` : s.name));
     p.push(`- Grade ${g}: ${names.join('; ')}.`);
   }
   p.push(`- Catch-up: ${cov.foundations} grade 3 to 5 skills (multiplying, dividing, fractions and decimals) for students who are behind.`);
-  p.push('- Teacher homework: any grade 6 to 8 assignment can become practice by uploading a photo of it.');
+  p.push("- Teacher homework: a teacher's own assignment can become practice by uploading a photo of it.");
   if (st.note) p.push(`Note: ${st.note}`);
   p.push('');
   p.push('What students do');
@@ -296,7 +300,7 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
   p.push('- It runs in any browser and installs on Chromebooks, tablets and phones.');
   p.push('');
   p.push('Student privacy');
-  p.push('- Students join with a class code and a nickname; no names, emails, photos or camera are used.');
+  p.push('- Students join with a class code and a nickname. No student names, emails or photos are collected, and the camera is never used.');
   p.push('- No ads, no data sales, a public privacy policy, a written retention schedule, deletion and per-student export, and encrypted backups.');
   p.push(st.privacyLaw ? `- We will work through the agreement ${st.privacyLaw} calls for, and sign your district's data privacy agreement.` : "- We will sign your district's student data privacy agreement.");
   p.push('');
@@ -306,7 +310,7 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
   if (priceText) {
     p.push('');
     p.push('Cost');
-    p.push(`- ${priceText}.`);
+    p.push(`- ${cap(priceText)}.`);
   }
   p.push('');
   p.push('Contact');
