@@ -333,6 +333,14 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       if (!cls || cls.kind !== 'manual') throw new HttpError(404, 'that class code did not match a class. Check it with your teacher');
       if (cls.endsOn && cls.endsOn < isoDay(clock())) throw new HttpError(403, 'that class has ended');
       if (cls.joinOpen === false) throw new HttpError(403, 'that class is not taking new students. Ask your teacher');
+      // the same nickname twice would quietly start that student over and give the teacher two rows with one name
+      const sameName = (a) => String(a || '').trim().toLowerCase() === nickname.trim().toLowerCase();
+      if ((await store.listClass(classCode)).some((s) => sameName(s.nickname))) {
+        throw new HttpError(
+          409,
+          `Someone in this class already uses the nickname ${nickname}. If that is you, tap "Played before? Use your sign-in code" below. Lost your code? Your teacher can give you a new one. Otherwise, pick a different nickname`,
+        );
+      }
       const token = randomBytes(24).toString('base64url');
       const student = newStudent({ id: randomUUID(), classCode, nickname });
       await store.createStudent(student, sha256(token));
@@ -497,6 +505,24 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       };
       if (cls?.nrpsUrl) out.roster = await lti.rosterSummary(code, list);
       return send(res, 200, out);
+    }
+
+    // ----- a new sign-in code for a student who lost theirs (the old code stops working) -----
+    if (method === 'POST' && /^\/api\/admin\/class\/[^/]+\/student\/[0-9a-f-]{36}\/sign-in-code$/.test(path)) {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      const who = await requireTeacher(req);
+      const rest = path.slice('/api/admin/class/'.length).split('/');
+      const code = cleanClassCode(decodeURIComponent(rest[0]));
+      if (!code) throw new HttpError(400, 'bad class code');
+      if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
+      if (!UUID.test(rest[2])) throw new HttpError(404, 'not found');
+      const s = await store.getStudent(rest[2]);
+      if (!s || s.classCode !== code) throw new HttpError(404, 'that student is not in this class');
+      if (s.lti) throw new HttpError(400, 'Brightspace students sign in through Brightspace and do not need a code');
+      const recoveryCode = await issueRecoveryCode(s);
+      await store.addEvent(s.id, 'recovery_code_new', { by: 'teacher' });
+      await store.addAudit(actorOf(who), 'new_sign_in_code', { classCode: code, students: 1 });
+      return send(res, 200, { nickname: s.nickname, recoveryCode });
     }
 
     // ----- deleting student data (a school's deletion request; Georgia asks for it within 45 days) -----

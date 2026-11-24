@@ -435,7 +435,7 @@ test('the phone apps can call the API from their own origin, and no other site c
       assert.equal(pre.status, 204);
       assert.equal(pre.headers.get('access-control-allow-origin'), origin);
       assert.match(pre.headers.get('access-control-allow-headers'), /authorization/);
-      const s = await call('/api/session', { method: 'POST', headers: { origin }, body: { classCode: 'ROOM1', nickname: 'Ava' } });
+      const s = await call('/api/session', { method: 'POST', headers: { origin }, body: { classCode: 'ROOM1', nickname: origin.startsWith('cap') ? 'Ava' : 'Ava Two' } });
       assert.equal(s.status, 201);
       assert.equal(s.headers.get('access-control-allow-origin'), origin);
     }
@@ -479,6 +479,45 @@ test('a student can delete their own data after typing their nickname', async ()
     const entry = audit.find((e) => e.action === 'delete_self');
     assert.ok(entry);
     assert.ok(!JSON.stringify(entry).includes('Ava'));
+  } finally {
+    server.close();
+  }
+});
+
+test('a nickname already in the class is refused, so a student cannot quietly start over', async () => {
+  const { server, call } = await boot();
+  try {
+    const first = await call('/api/session', { method: 'POST', body: { classCode: 'ROOM1', nickname: 'Glitter Fox' } });
+    assert.equal(first.status, 201);
+    const again = await call('/api/session', { method: 'POST', body: { classCode: 'ROOM1', nickname: '  glitter fox ' } });
+    assert.equal(again.status, 409);
+    assert.match(again.json.error, /sign-in code/);
+    // the same nickname in another class is fine
+    assert.equal((await call('/api/session', { method: 'POST', body: { classCode: 'HOME', nickname: 'Glitter Fox' } })).status, 201);
+    const roster = await call('/api/admin/class/ROOM1', { headers: { 'x-admin-token': 'dev-admin' } });
+    assert.equal(roster.json.students.filter((s) => s.nickname === 'Glitter Fox').length, 1);
+  } finally {
+    server.close();
+  }
+});
+
+test('a teacher can give a student a new sign-in code; the old one stops working', async () => {
+  const { server, call } = await boot();
+  try {
+    const s = await call('/api/session', { method: 'POST', body: { classCode: 'ROOM1', nickname: 'Lost Code' } });
+    const roster = await call('/api/admin/class/ROOM1', { headers: { 'x-admin-token': 'dev-admin' } });
+    const id = roster.json.students.find((x) => x.nickname === 'Lost Code').id;
+    const path = `/api/admin/class/ROOM1/student/${id}/sign-in-code`;
+    assert.equal((await call(path, { method: 'POST' })).status, 403);
+    assert.equal((await call(`/api/admin/class/HOME/student/${id}/sign-in-code`, { method: 'POST', headers: { 'x-admin-token': 'dev-admin' } })).status, 404);
+    const r = await call(path, { method: 'POST', headers: { 'x-admin-token': 'dev-admin' } });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.nickname, 'Lost Code');
+    assert.match(r.json.recoveryCode, /^RR-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+    assert.equal((await call('/api/session/recover', { method: 'POST', body: { code: s.json.recoveryCode } })).status, 404);
+    const back = await call('/api/session/recover', { method: 'POST', body: { code: r.json.recoveryCode } });
+    assert.equal(back.status, 200);
+    assert.equal(back.json.student.nickname, 'Lost Code');
   } finally {
     server.close();
   }
