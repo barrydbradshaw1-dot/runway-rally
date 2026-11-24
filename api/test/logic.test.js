@@ -142,3 +142,18 @@ test('class summary never flags a skill the student has not tried', () => {
   assert.ok(row.attempts[skill] >= 2);
   for (const k of Object.keys(row.attempts)) if (row.attempts[k] === 0) assert.ok(!row.needsHelpWith.includes(k));
 });
+
+test('a newly opened skill is announced once, on the answer that opened it', () => {
+  const rng = mulberry32(11);
+  const s = newStudent({ id: 'u9', classCode: 'ABC', nickname: 'Test' });
+  startCommission(s, { rng });
+  const seen = [];
+  for (let n = 0; n < COMMISSION_LENGTH; n++) {
+    const t = nextTask(s, rng);
+    if (!t) break;
+    const r = applyAnswer(s, t, t.answerText, rng);
+    seen.push(...(r.newlyUnlockedSkills || []));
+  }
+  assert.ok(seen.length > 0, 'a fresh student opens at least one skill in a perfect commission');
+  assert.equal(new Set(seen).size, seen.length, 'no skill is announced twice');
+});

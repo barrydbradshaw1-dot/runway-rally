@@ -626,7 +626,7 @@ function exportCsv() {
 }
 
 function dashboard() {
-  const { students, skills, classCode, title, roster } = state.data;
+  const { students, skills, classCode, title, roster, kind } = state.data;
   const rosterLine = roster && !roster.error ? `${roster.launched} of ${roster.enrolled} enrolled students have opened Runway Rally${roster.notLaunched ? ` · ${roster.notLaunched} have not yet` : ''}` : roster?.error ? 'Course roster is unavailable right now' : '';
   // with 19 skills, show only the columns someone in the class has practiced (all of them if nobody has yet)
   const allIds = Object.keys(skills);
@@ -714,7 +714,7 @@ function dashboard() {
       'section',
       { class: 'panel', 'aria-labelledby': 'm-h' },
       h('div', { class: 'toolbar' }, h('h2', { id: 'm-h', text: 'Mastery by skill' }), sort),
-      students.length ? h('div', { class: 'tablewrap' }, table) : h('p', { class: 'empty', text: title ? 'No students have opened Runway Rally yet. They launch it from your Brightspace course.' : `No students have joined ${classCode} yet. Share the class code with your class.` }),
+      students.length ? h('div', { class: 'tablewrap' }, table) : h('p', { class: 'empty', text: kind === 'lti' ? 'No students have opened Runway Rally yet. They launch it from your Brightspace course.' : `No students have joined ${classCode} yet. Share the class code with your class.` }),
       h('div', { class: 'legend' }, h('span', { class: 'l1', text: 'Below 35%' }), h('span', { class: 'l2', text: '35% to 59%' }), h('span', { class: 'l3', text: '60% and up' }), h('span', { text: 'Percentages are shown in every cell, not just color' })),
     ),
     homeworkPanel(),

@@ -337,6 +337,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   const today = touchDay(student, now, tz); // before mastery changes, so the day's snapshot is a true "before"
   const effective = Math.min(3, task.hintLevel + (task.attempts - 1));
   const aided = effective > 0;
+  const openBefore = new Set(SKILL_IDS.filter((k) => isUnlocked(k, student.mastery))); // to announce only skills this answer opened
   const before = student.mastery[task.skill];
   student.mastery[task.skill] = updateMastery(before, correct, effective, task.level);
   student.wrongStreak[task.skill] = correct ? 0 : (student.wrongStreak[task.skill] || 0) + 1;
@@ -367,7 +368,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
     steps: correct ? null : task.hints,
     revealedAnswer: correct ? null : task.answerText,
     unlocked: grantUnlocks(student),
-    newlyUnlockedSkills: SKILL_IDS.filter((k) => isUnlocked(k, student.mastery) && !isUnlocked(k, c.startMastery || {})),
+    newlyUnlockedSkills: SKILL_IDS.filter((k) => isUnlocked(k, student.mastery) && !openBefore.has(k)),
     commissionComplete: false,
   };
   if (task.es) {
