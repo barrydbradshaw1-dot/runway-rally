@@ -295,7 +295,7 @@ function recoverScreen(msg = '') {
   code.focus();
 }
 
-function recoveryCodeScreen(codeText, { first = false } = {}) {
+function recoveryCodeScreen(codeText, { first = false, thenSignOut = false } = {}) {
   const copied = h('p', { class: 'muted center', role: 'status' });
   const copy = navigator.clipboard
     ? h('button', {
@@ -321,7 +321,7 @@ function recoveryCodeScreen(codeText, { first = false } = {}) {
       copied,
       h('p', { class: 'muted', text: first ? 'Ask a grown-up to write it down or keep it somewhere safe.' : 'Your old code no longer works.' }),
     ),
-    h('button', { class: 'primary', text: first ? 'I saved it' : 'Done', onclick: homeScreen }),
+    h('button', { class: 'primary', text: thenSignOut ? 'I saved it. Sign me out' : first ? 'I saved it' : 'Done', onclick: thenSignOut ? signOut : homeScreen }),
   );
 }
 
@@ -393,7 +393,7 @@ async function homeScreen() {
     h(
       'div',
       { class: 'topbar' },
-      h('div', { class: 'pill', text: st.nickname }),
+      h('div', { class: 'row' }, h('div', { class: 'pill', text: st.nickname }), st.viaLti ? null : h('button', { class: 'ghost small notyou', text: 'Not you?', onclick: signOut })),
       h('div', { class: 'row' }, st.streak > 0 ? h('div', { class: 'pill streak', title: 'Days in a row', text: `🔥 ${st.streak}` }) : null, h('div', { class: 'pill thread', text: `🧵 ${st.thread}` })),
     ),
     checkCard,
@@ -434,6 +434,34 @@ async function homeScreen() {
     ),
     h('div', { class: 'card stack' }, h('h3', { text: 'Your skills' }), skillBars(st)),
     grownUps(st),
+    st.viaLti ? null : h('button', { class: 'ghost', text: 'Sign out', onclick: signOutScreen }),
+  );
+}
+
+// Signing out on a shared device. Coming back needs the sign-in code, so offer a fresh one first.
+function signOutScreen() {
+  const msg = h('p', { class: 'error', role: 'alert' });
+  show(
+    h(
+      'div',
+      { class: 'card stack' },
+      h('h2', { text: `Sign out, ${state.student.nickname}?` }),
+      h('p', { text: 'Your designs and skills stay saved. To come back, you need your sign-in code (it starts with RR-). If you do not have it, get a new one first.' }),
+      msg,
+      h('button', { class: 'primary', text: 'Sign out', onclick: signOut }),
+      h('button', {
+        text: 'Get my sign-in code first',
+        onclick: async () => {
+          try {
+            const r = await api('/api/recovery-code', { method: 'POST' });
+            recoveryCodeScreen(r.recoveryCode, { thenSignOut: true });
+          } catch (e) {
+            msg.textContent = e.message;
+          }
+        },
+      }),
+      h('button', { class: 'ghost', text: 'Stay signed in', onclick: () => homeScreen() }),
+    ),
   );
 }
 
@@ -496,7 +524,6 @@ function grownUps(st) {
             },
           }),
       h('button', { text: 'Redo the skills check', onclick: () => startPlacement(true) }),
-      st.viaLti ? null : h('button', { class: 'ghost', onclick: signOut, text: 'Switch student' }),
       h('button', { class: 'ghost', text: 'Delete my data', onclick: deleteScreen }),
       privacyLink(),
     ),
