@@ -98,6 +98,7 @@ export function normalizeStudent(s) {
   s.faded ??= {};
   s.examplesSeen ??= [];
   s.placement ??= null;
+  s.spanishFirst ??= false; // the teacher can set Spanish to show first, for an English learner
   s.daily ??= {};
   s.snapshots ??= {};
   s.streak ??= { count: 0, lastDay: null };
@@ -127,6 +128,7 @@ export function publicStudent(s) {
     favorites: topInterests(s.interest),
     placement: s.placement ? { status: s.placement.status, asked: s.placement.asked } : null,
     reviewsDue: dueReviews(s).length,
+    spanishFirst: s.spanishFirst === true,
     commission: s.commission && {
       id: s.commission.id,
       skill: s.commission.skill,
@@ -543,6 +545,7 @@ export function classSummary(students) {
       streak: s.streak.count,
       topAreas: topInterests(s.interest, 3),
       needsHelpWith: needsHelp(s),
+      spanishFirst: s.spanishFirst === true,
     };
   });
 }

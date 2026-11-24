@@ -106,7 +106,7 @@ export function cleanNickname(raw, env = process.env) {
 
 // The privacy policy a teacher agrees to when making a class. Change it when the policy changes,
 // so the console can ask teachers to look again.
-export const POLICY_VERSION = '2026-11-23';
+export const POLICY_VERSION = '2026-11-24';
 
 export function cleanClassCode(raw) {
   if (typeof raw !== 'string') return null;
@@ -554,20 +554,27 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
       const code = cleanClassCode(decodeURIComponent(rest[0]));
       if (!code) throw new HttpError(400, 'bad class code');
       if (!(await canManage(who, code))) throw new HttpError(403, 'forbidden');
-      // a teacher renames a student whose nickname is unkind or is a real name
+      // a teacher renames a student whose nickname is unkind or is a real name,
+      // or sets Spanish to show first for an English learner (no tap needed on the student's side)
       if (rest.length === 3 && rest[1] === 'student' && UUID.test(rest[2])) {
         const body = await readJson(req);
-        const nickname = nicknameOf(body.nickname);
-        const done = await withLock(rest[2], async () => {
+        const rename = body.nickname !== undefined;
+        const setEs = body.spanishFirst !== undefined;
+        if (!rename && !setEs) throw new HttpError(400, 'nothing to change');
+        if (setEs && typeof body.spanishFirst !== 'boolean') throw new HttpError(400, 'spanishFirst should be true or false');
+        const nickname = rename ? nicknameOf(body.nickname) : null;
+        const saved = await withLock(rest[2], async () => {
           const s = await store.getStudent(rest[2]);
-          if (!s || s.classCode !== code) return false;
-          s.nickname = nickname;
+          if (!s || s.classCode !== code) return null;
+          if (rename) s.nickname = nickname;
+          if (setEs) s.spanishFirst = body.spanishFirst;
           await store.saveStudent(s);
-          return true;
+          return s;
         });
-        if (!done) throw new HttpError(404, 'that student is not in this class');
-        await store.addAudit(actorOf(who), 'rename_student', { classCode: code, students: 1 });
-        return send(res, 200, { nickname });
+        if (!saved) throw new HttpError(404, 'that student is not in this class');
+        if (rename) await store.addAudit(actorOf(who), 'rename_student', { classCode: code, students: 1 });
+        if (setEs) await store.addAudit(actorOf(who), 'spanish_first', { classCode: code, students: 1, on: body.spanishFirst });
+        return send(res, 200, { nickname: saved.nickname, spanishFirst: saved.spanishFirst === true });
       }
       if (rest.length !== 1) throw new HttpError(404, 'not found');
       const cls = await store.getClass(code);

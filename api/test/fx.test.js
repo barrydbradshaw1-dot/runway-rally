@@ -18,5 +18,5 @@ test('a real right answer gets a sparkle burst; a new piece gets a different sho
   assert.ok(!/setAttribute\('style'|style: /.test(fx), 'styles are set through the style object, which the page policy allows');
   const css = await web('styles.css');
   for (const k of ['@keyframes burst', '@keyframes shower', '@keyframes glow', '.fx { display: none; }']) assert.ok(css.includes(k), k);
-  assert.match(await web('sw.js'), /runway-rally-v15/);
+  assert.match(await web('sw.js'), /runway-rally-v16/);
 });

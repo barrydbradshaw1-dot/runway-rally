@@ -109,7 +109,11 @@ function show(...nodes) {
 // ---------- Spanish help ("Ver en español") ----------
 // Only when the teacher turned it on for the class: the server then sends a Spanish copy of each problem
 // (task.es). The student's choice is remembered on this device. The English stays on screen.
-const esChosen = () => store.get('rr_es') === '1';
+// A tap on this device wins; otherwise the teacher's setting for the student decides (Spanish first, no tap needed).
+const esChosen = () => {
+  const v = store.get('rr_es');
+  return v === '1' || (v !== '0' && state.student?.spanishFirst === true);
+};
 const useEs = () => Boolean(state.task?.es) && esChosen();
 const L = (en, es) => (useEs() ? es : en);
 
