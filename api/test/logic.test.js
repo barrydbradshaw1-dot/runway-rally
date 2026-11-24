@@ -89,7 +89,8 @@ test('a full commission: wrong then right, rewards, a new piece, and cleanup', (
     if (n === 0) {
       const miss = applyAnswer(s, task, '-1', rng);
       assert.equal(miss.retry, true, 'first miss allows a retry');
-      assert.equal(giveHint(task).level, 1);
+      assert.equal(miss.hint.level, 1, 'a miss shows the first step on its own');
+      assert.equal(giveHint(task).level, 2);
     }
     const hit = applyAnswer(s, task, String(task.answer), rng);
     assert.equal(hit.correct, true);

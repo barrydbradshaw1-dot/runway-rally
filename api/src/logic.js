@@ -1,6 +1,7 @@
 // Game rules. Pure functions over a student document, so they are easy to test.
 // The server owns grading and rewards; the client never grants anything.
 import { randomUUID } from 'node:crypto';
+import { SKILL_NAMES_ES } from './skills.es.js';
 import { SKILLS, SKILL_IDS, makeTask, makeExample, gradeAnswer, diagnose, diagnoseEs, storyFor, storyForEs, depthOf, ancestorsOf, descendantsOf } from './skills.js';
 import {
   START_MASTERY,
@@ -30,9 +31,14 @@ export const REWARD_MIN_CORRECT = 3; // a new piece needs 3 of 5 right...
 export const REWARD_MIN_GAIN = 0.08; // ...or clear progress on the skill
 export const ALL_COLLECTED_THREAD = 5; // once every piece and colour is theirs
 export const REVIEW_SLOTS = [2, 4]; // 3rd and 5th problems can be review from another skill
+export const MIXED_SLOT = 4; // with nothing due for review, the 5th problem mixes in another practiced skill
 export const SESSION_COMMISSIONS = 3;
 export const SESSION_SECONDS = 20 * 60;
 export const PLACEMENT_MAX = 18;
+// A short goal each day builds the habit: problems answered, right or not, so a student who is
+// struggling can still reach it. Meeting it gives a small Thread bonus once a day.
+export const DAILY_GOAL = 10;
+export const DAILY_GOAL_BONUS = 5;
 const DAY = 86_400_000;
 
 // Skill pieces come from skill scores; reward pieces from finished commissions (see web/items.js).
@@ -222,28 +228,45 @@ export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
     return task;
   }
   // Mid-commission repair: repeated failure steps back to the weakest prerequisite.
+  let repairedNow = false;
   if ((student.wrongStreak[c.skill] || 0) >= 3) {
     const pre = weakestPrereq(c.skill, student.mastery);
     if (pre) {
       student.wrongStreak[c.skill] = 0;
       c.skill = pre;
       c.repair = true;
+      repairedNow = true;
     }
   }
-  // Interleaving: some slots bring back a different skill that is due for review.
-  let skill = c.skill;
+  // "Try one like it": after a miss (or an answer the last hint gave away) the next problem is the
+  // same kind, no harder, so she uses the steps she was just shown while they are fresh.
+  const likeIt = !repairedNow && c.likeIt && SKILLS[c.likeIt.skill] ? c.likeIt : null;
+  c.likeIt = null;
+  // Interleaving: some slots bring back a different skill that is due for review. When nothing is
+  // due, the last slot mixes in another skill she has practiced before, so topics stay mixed.
+  let skill = likeIt ? likeIt.skill : c.skill;
   let review = false;
-  if (REVIEW_SLOTS.includes(c.done) && !c.repair) {
+  let mixed = false;
+  if (likeIt) {
+    review = dueReviews(student, now).includes(skill);
+  } else if (REVIEW_SLOTS.includes(c.done) && !c.repair) {
     const due = dueReviews(student, now).filter((s) => s !== c.skill);
     if (due.length) {
       skill = due[0];
       review = true;
+    } else if (c.done === MIXED_SLOT) {
+      const other = mixInSkill(student, c.skill);
+      if (other) {
+        skill = other;
+        mixed = true;
+      }
     }
   } else if (dueReviews(student, now).includes(skill)) {
     review = true;
   }
   let level = chooseLevel(student, skill);
   if ((student.wrongStreak[skill] || 0) >= 3) level = 1; // no prerequisite to fall back on
+  if (likeIt) level = Math.min(level, likeIt.level);
   let t = makeTask(skill, level, c.theme, rng, { es });
   const key = `${skill}:${t.level}`;
   let example = null;
@@ -262,6 +285,8 @@ export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
     commissionId: c.id,
     ...t,
     review,
+    mixed,
+    likeIt: Boolean(likeIt),
     example,
     attempts: 0,
     hintLevel: 0,
@@ -269,6 +294,13 @@ export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
   };
   student.currentTaskId = task.id;
   return task;
+}
+
+// Another skill to mix into a commission: open, practiced before, and the one left alone longest.
+export function mixInSkill(student, current) {
+  const tried = unlockedSkills(student.mastery).filter((k) => k !== current && (student.skillStats?.[k]?.answered ?? 0) > 0);
+  tried.sort((a, b) => (student.lastPracticed[a] || '').localeCompare(student.lastPracticed[b] || ''));
+  return tried[0] || null;
 }
 
 export function publicTask(task, commission) {
@@ -281,9 +313,13 @@ export function publicTask(task, commission) {
     form: task.form,
     requireFraction: Boolean(task.requireFraction),
     review: Boolean(task.review),
+    mixed: Boolean(task.mixed),
+    likeIt: Boolean(task.likeIt),
     example: task.example || null,
     placement: Boolean(task.placement),
     fromTeacher: Boolean(task.fromTeacher),
+    // steps already shown (after a reload or a pause), never the ones still to come
+    ...(task.hintLevel > 0 && !task.answered && !task.placement ? { shownSteps: hintSteps(task) } : {}),
     number: task.placement ? task.placementNumber : commission.done + 1,
     of: task.placement ? null : commission.total,
     // Spanish help, only when the class has it turned on
@@ -291,22 +327,30 @@ export function publicTask(task, commission) {
   };
 }
 
+// The hint steps shown so far, in order, so the method builds up on screen one step at a time.
+export function hintSteps(task) {
+  const out = { level: task.hintLevel, steps: task.hints.slice(0, task.hintLevel) };
+  if (task.es) out.es = { steps: task.es.hints.slice(0, task.hintLevel) };
+  return out;
+}
+
 export function giveHint(task) {
   if (task.answered) return { error: 'task already answered' };
   if (task.placement) return { error: 'hints are off during the skills check. Tap "Not sure yet" to skip it.' };
   task.hintLevel = Math.min(3, task.hintLevel + 1);
-  const h = { level: task.hintLevel, text: task.hints[task.hintLevel - 1] };
-  if (task.es) h.es = { text: task.es.hints[task.hintLevel - 1] };
+  const h = { level: task.hintLevel, text: task.hints[task.hintLevel - 1], ...hintSteps(task) };
+  if (task.es) h.es = { text: task.es.hints[task.hintLevel - 1], steps: task.es.hints.slice(0, task.hintLevel) };
   return h;
 }
 
 const PRAISE = ['Perfect cut!', 'That fits beautifully.', 'Nailed it.', 'Runway ready.', 'Exactly right.'];
-const ENCOURAGE = ['Not quite yet. Try once more, or tap Hint.', 'Not yet. A hint can help, then try again.'];
 // Spanish, same order. Written so they never depend on the student's gender.
 const REVEALED = 'You got there with the last hint. Next time, try it before the last hint to count it as right.';
 const REVEALED_ES = 'Llegaste con la última pista. La próxima vez, inténtalo antes de la última pista para que cuente como correcta.';
 const PRAISE_ES = ['¡Corte perfecto!', 'Queda precioso.', '¡Lo lograste!', '¡Listo para la pasarela!', '¡Exacto!'];
-const ENCOURAGE_ES = ['Todavía no. Inténtalo otra vez, o toca Pista.', 'Todavía no. Una pista puede ayudar; luego inténtalo de nuevo.'];
+// After a miss the next step of the method shows on its own, so the words point to it.
+const STEP_IN = ['Not quite yet. Here is a step to get you going.', 'Not yet. Try this step, then answer again.'];
+const STEP_IN_ES = ['Todavía no. Aquí tienes un paso para empezar.', 'Todavía no. Prueba este paso y vuelve a responder.'];
 
 // Daily log, streak and a once-a-day mastery snapshot for the family progress page.
 function touchDay(student, now, tz) {
@@ -326,6 +370,23 @@ function touchDay(student, now, tz) {
   return d;
 }
 
+// Today's goal for the student: how many problems so far, and whether it is met.
+export function dailyGoal(student, { now = Date.now(), tz = 0 } = {}) {
+  const d = student.daily?.[dayKey(now, tz)];
+  const answered = d?.answered ?? 0;
+  return { goal: DAILY_GOAL, answered, met: Boolean(d?.goalMet) || answered >= DAILY_GOAL };
+}
+
+// Days in the last 7 (today included) on which the goal was met.
+export function goalDays(student, now = Date.now(), tz = 0) {
+  let n = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = student.daily?.[dayKey(now - i * DAY, tz)];
+    if (d && (d.goalMet || d.answered >= DAILY_GOAL)) n++;
+  }
+  return n;
+}
+
 export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 } = {}) {
   if (task.answered) return { error: 'task already answered' };
   if (task.placement) return { error: 'use the skills check to answer this' };
@@ -337,14 +398,23 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   const why = correct ? null : diagnose(task, raw);
 
   if (!correct && task.attempts < MAX_ATTEMPTS) {
-    const retry = { correct: false, retry: true, feedback: why || ENCOURAGE[task.attempts % ENCOURAGE.length], specific: Boolean(why) };
-    if (task.es) retry.es = { feedback: (why && diagnoseEs(task, raw)) || ENCOURAGE_ES[task.attempts % ENCOURAGE_ES.length] };
+    const retry = { correct: false, retry: true, feedback: why || STEP_IN[task.attempts % STEP_IN.length], specific: Boolean(why) };
+    if (task.es) retry.es = { feedback: (why && diagnoseEs(task, raw)) || STEP_IN_ES[task.attempts % STEP_IN_ES.length] };
+    // Stuck: show the next step of the method right away, so she is not left guessing. It is free
+    // (the wrong try already costs a little), and it never goes as far as the last step, which
+    // states the answer.
+    if (task.hintLevel < 2) {
+      task.hintLevel += 1;
+      task.freeHints = (task.freeHints || 0) + 1;
+      retry.hint = hintSteps(task);
+      if (task.es) retry.es.hint = hintSteps(task).es;
+    }
     return retry;
   }
 
   task.answered = true;
   const today = touchDay(student, now, tz); // before mastery changes, so the day's snapshot is a true "before"
-  const effective = Math.min(3, task.hintLevel + (task.attempts - 1));
+  const effective = Math.min(3, task.hintLevel - (task.freeHints || 0) + (task.attempts - 1));
   const aided = effective > 0;
   const revealed = correct && task.hintLevel >= 3; // the last hint states the answer, so typing it in is not counted as getting it right
   const openBefore = new Set(SKILL_IDS.filter((k) => isUnlocked(k, student.mastery))); // to announce only skills this answer opened
@@ -359,12 +429,19 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   if (correct) ss.correct += 1;
   today.answered += 1;
   if (correct) today.correct += 1;
+  let goalMet = null;
+  if (!today.goalMet && today.answered >= DAILY_GOAL) {
+    today.goalMet = true;
+    student.thread += DAILY_GOAL_BONUS;
+    goalMet = { goal: DAILY_GOAL, bonus: DAILY_GOAL_BONUS, daysThisWeek: goalDays(student, now, tz) };
+  }
 
   const thread = correct ? [5, 4, 3, 2][effective] : 1; // trying always pays something
   const praise = correct ? Math.floor(rng() * PRAISE.length) : 0;
   student.thread += thread;
   c.done += 1;
   if (correct && !revealed) c.correct += 1;
+  if (!c.assignment) c.likeIt = !correct || revealed ? { skill: task.skill, level: task.level } : null;
 
   const result = {
     correct,
@@ -378,9 +455,12 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
     explanation: correct ? null : task.hints[2],
     steps: correct ? null : task.hints,
     revealedAnswer: correct ? null : task.answerText,
+    likeItNext: !c.assignment && (!correct || revealed),
     unlocked: grantUnlocks(student),
     newlyUnlockedSkills: SKILL_IDS.filter((k) => isUnlocked(k, student.mastery) && !openBefore.has(k)),
     commissionComplete: false,
+    today: dailyGoal(student, { now, tz }),
+    ...(goalMet ? { goalMet } : {}),
   };
   if (task.es) {
     result.es = {
@@ -525,7 +605,11 @@ function needsHelp(s) {
   return out;
 }
 
-export function classSummary(students) {
+// A student who has played before but not in this many days shows under "Check in with" for the teacher.
+export const QUIET_DAYS = 7;
+
+export function classSummary(students, { now = Date.now(), tz = 0 } = {}) {
+  const quietSince = dayKey(now - QUIET_DAYS * DAY, tz);
   return students.map((raw) => {
     const s = normalizeStudent(raw);
     const accuracy = s.stats.answered ? Math.round((100 * s.stats.correct) / s.stats.answered) : null;
@@ -546,8 +630,21 @@ export function classSummary(students) {
       topAreas: topInterests(s.interest, 3),
       needsHelpWith: needsHelp(s),
       spanishFirst: s.spanishFirst === true,
+      lastActive: lastActive(s),
+      goalDaysThisWeek: goalDays(s, now, tz),
+      quiet: s.stats.answered > 0 && (lastActive(s) || '') <= quietSince,
+      stuckOn: SKILL_IDS.filter((k) => (s.wrongStreak[k] || 0) >= 3),
     };
   });
+}
+
+// Last day with any practice. Days are kept for 35 days, so after that it falls back to the last
+// answer on any skill.
+function lastActive(s) {
+  const day = Object.keys(s.daily || {}).sort().pop();
+  if (day) return day;
+  const last = Object.values(s.lastPracticed || {}).sort().pop();
+  return last ? String(last).slice(0, 10) : null;
 }
 
 // What a parent or grandparent sees: plain words, no ranking against other students.
@@ -574,6 +671,7 @@ export function progressSummary(student, { now = Date.now(), tz = 0 } = {}) {
     .filter((k) => s.mastery[k] < STRONG_AT && (s.skillStats[k]?.answered ?? 0) > 0 && !help.includes(k))
     .sort((a, b) => (s.lastPracticed[b] || '').localeCompare(s.lastPracticed[a] || ''));
   const pct = (m) => Math.round(m * 100);
+  const sk = (k) => ({ id: k, name: SKILLS[k].name, nameEs: SKILL_NAMES_ES[k], percent: pct(s.mastery[k]), standard: SKILLS[k].standard, grade: SKILLS[k].grade });
   return {
     nickname: s.nickname,
     today,
@@ -581,12 +679,27 @@ export function progressSummary(student, { now = Date.now(), tz = 0 } = {}) {
     thisWeek: { minutes, answered, correct, daysActive: days.length },
     placement: s.placement?.status || 'not started',
     strong: strong.map((k) => SKILLS[k].name),
+    strongEs: strong.map((k) => SKILL_NAMES_ES[k]),
     strongStandards: [...new Set(strong.flatMap((k) => SKILLS[k].codes))].sort(),
-    workingOn: working.slice(0, 4).map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]), standard: SKILLS[k].standard, grade: SKILLS[k].grade })),
-    needsHelp: help.map((k) => ({ name: SKILLS[k].name, percent: pct(s.mastery[k]), standard: SKILLS[k].standard, grade: SKILLS[k].grade })),
-    improved: gains.slice(0, 3).map((g) => ({ name: SKILLS[g.k].name, from: pct(g.from), to: pct(g.to), standard: SKILLS[g.k].standard })),
+    workingOn: working.slice(0, 4).map(sk),
+    needsHelp: help.map(sk),
+    improved: gains.slice(0, 3).map((g) => ({ ...sk(g.k), from: pct(g.from), to: pct(g.to) })),
     lastActive: Object.keys(s.daily).sort().pop() || null,
   };
+}
+
+// The weekly report a teacher prints or saves for a student's family. Built when asked from what is
+// already kept (the daily log and skill levels); nothing new is stored and nothing is sent anywhere.
+export function weeklyReport(student, { now = Date.now(), tz = 0 } = {}) {
+  const s = normalizeStudent(student);
+  const base = progressSummary(s, { now, tz });
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const day = dayKey(now - i * DAY, tz);
+    const d = s.daily[day];
+    days.push({ day, answered: d?.answered ?? 0, correct: d?.correct ?? 0, minutes: d ? Math.round(d.seconds / 60) : 0, goalMet: Boolean(d && (d.goalMet || d.answered >= DAILY_GOAL)) });
+  }
+  return { ...base, from: days[0].day, to: days[6].day, days, goal: DAILY_GOAL, goalDays: days.filter((d) => d.goalMet).length, spanishFirst: s.spanishFirst === true };
 }
 
 export { levelFor };
