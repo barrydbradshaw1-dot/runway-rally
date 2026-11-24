@@ -33,6 +33,7 @@ import {
   dailyGoal,
   setLook,
 } from './logic.js';
+import { createProspects, buildPitch } from './prospects.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -140,6 +141,8 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return Number.isInteger(n) && Math.abs(n) <= 840 ? n : 0;
   };
   const retention = retentionConfig(env);
+  // Sales targeting data for the owner (see prospects.js and api/tools/build-school-data.mjs).
+  const prospects = createProspects(env.PROSPECTS_DATA_DIR ? { dataDir: resolve(env.PROSPECTS_DATA_DIR) } : {});
   // Homework practice: reading a photo of an assignment needs ANTHROPIC_API_KEY (see homework.js).
   const homework = homeworkConfig(env);
   const photoReader = readPhoto || (homework.photos ? makePhotoReader({ apiKey: env.ANTHROPIC_API_KEY, model: homework.model }) : null);
@@ -705,6 +708,37 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         if (!(await store.deleteTeacher(id))) throw new HttpError(404, 'teacher not found');
         await store.addAudit('owner', 'remove_teacher', { teacherId: id });
         return send(res, 200, { removed: true });
+      }
+      throw new HttpError(404, 'not found');
+    }
+
+    // ----- sales targeting (owner only): districts, schools and pitches for /admin/prospects/ -----
+    //   GET  /api/admin/prospects/states      every state, with what data has been built
+    //   GET  /api/admin/prospects/state/GA    one state's districts and schools
+    //   POST /api/admin/prospects/pitch       { state, district, school?, price, sender, recipient, steps } -> email and proposal
+    if (path.startsWith('/api/admin/prospects/')) {
+      if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
+      requireOwner(await requireTeacher(req));
+      if (method === 'GET' && path === '/api/admin/prospects/states') return send(res, 200, { states: await prospects.states() });
+      const one = /^\/api\/admin\/prospects\/state\/([A-Z]{2})$/.exec(path);
+      if (method === 'GET' && one) {
+        const st = await prospects.state(one[1]);
+        if (!st) throw new HttpError(404, 'unknown state');
+        return send(res, 200, st);
+      }
+      if (method === 'POST' && path === '/api/admin/prospects/pitch') {
+        const body = await readJson(req);
+        const st = typeof body.state === 'string' ? await prospects.state(body.state.toUpperCase()) : null;
+        if (!st) throw new HttpError(404, 'unknown state');
+        const district = st.districts.find((d) => d.id === String(body.district || ''));
+        if (!district) throw new HttpError(404, 'unknown district');
+        let school = null;
+        if (body.school) {
+          school = st.schools.find((x) => x.id === String(body.school) && x.district === district.id);
+          if (!school) throw new HttpError(404, 'unknown school');
+        }
+        const sender = body.sender && typeof body.sender === 'object' ? body.sender : {};
+        return send(res, 200, buildPitch({ st, district, school, price: body.price, sender, recipient: body.recipient, steps: body.steps }));
       }
       throw new HttpError(404, 'not found');
     }
