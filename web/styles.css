@@ -268,3 +268,18 @@ button.danger { background: var(--danger); color: #fff; }
 /* Spanish help: "Ver en español" sits at the top right of the problem card */
 .lang-toggle { align-self: flex-end; font-size: 0.9rem; padding: 0.25rem 0.6rem; }
 .sound-toggle { font-size: 0.9rem; padding: 8px 10px; min-height: 44px; white-space: nowrap; }
+
+/* hints build up step by step; the newest step is highlighted */
+.hint-box .hint-head { font-weight: 800; margin: 0 0 6px; }
+.hint-box .steps li.new { background: #ffefb8; border-radius: 8px; padding: 2px 6px; margin-left: -6px; }
+.last-note { margin: 0; }
+.nudge { animation: nudge 1.2s ease-in-out 3; }
+@keyframes nudge { 50% { box-shadow: 0 0 0 5px rgba(255, 184, 0, 0.6); } }
+
+/* today's goal */
+.card.goal { display: grid; gap: 8px; }
+.card.goal .track { height: 12px; border-radius: 999px; background: #e6e0fb; overflow: hidden; }
+.card.goal .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--gold), var(--pink)); transition: width 0.4s; }
+.card.goal.met { background: linear-gradient(135deg, #fff8e4, #fff0fa); }
+.goal-banner { border-color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .nudge { animation: none; outline: 3px solid var(--gold); } }

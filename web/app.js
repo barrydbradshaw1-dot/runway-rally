@@ -66,8 +66,8 @@ const state = {
   story: '',
   storyEs: '',
   input: '',
-  hint: null,
-  hintEs: null,
+  steps: [], // hint steps shown so far on this problem, in order
+  stepsEs: [],
   hintLevel: 0,
   busy: false,
   keyHandler: null,
@@ -97,7 +97,15 @@ function s(tag, props = {}, ...kids) {
   return el;
 }
 
+// Hint steps for the current problem: cleared for a new one, filled from what the server sent.
+function setSteps(x) {
+  state.steps = x?.steps || [];
+  state.stepsEs = x?.es?.steps || [];
+  state.hintLevel = x?.level || 0;
+}
+
 function show(...nodes) {
+  clearTimeout(state.stuckTimer);
   if (state.keyHandler) {
     document.removeEventListener('keydown', state.keyHandler);
     state.keyHandler = null;
@@ -217,7 +225,7 @@ function signOut() {
   store.del('rr_es');
   store.del(SOUND_KEY);
   const viaLti = state.student?.viaLti;
-  Object.assign(state, { token: null, student: null, task: null, hint: null, input: '' });
+  Object.assign(state, { token: null, student: null, task: null, steps: [], stepsEs: [], hintLevel: 0, input: '' });
   if (viaLti) return show(h('div', { class: 'card stack' }, h('h2', { text: 'Session ended' }), h('p', { text: 'Open Runway Rally again from your course in Brightspace.' })));
   loginScreen();
 }
@@ -353,9 +361,7 @@ async function homeScreen() {
       state.task = r.task;
       state.story = r.resumed ? '' : r.repair ? 'Let us warm up with a building-block skill first. It will make the next one easier.' : r.story;
       state.storyEs = r.resumed ? '' : r.repair ? 'Primero calentemos con una habilidad básica. Así la siguiente será más fácil.' : r.storyEs || '';
-      state.hint = null;
-      state.hintEs = null;
-      state.hintLevel = 0;
+      setSteps(r.task.shownSteps); // a resumed problem keeps the steps already shown
       state.input = '';
       if (r.task.example) exampleScreen();
       else taskScreen();
@@ -413,6 +419,7 @@ async function homeScreen() {
           h('button', { class: 'primary', text: 'Design my look', onclick: () => lookScreen() }),
         )
       : null,
+    goalCard(st.today),
     h('div', { class: 'card avatar-wrap pop' }, avatar()),
     st.commission
       ? h('button', { class: 'primary', onclick: () => start(null), text: st.commission.fromTeacher ? `Continue ${st.commission.fromTeacher} (${st.commission.done}/${st.commission.total})` : `Continue commission (${st.commission.done}/${st.commission.total})` })
@@ -554,7 +561,7 @@ function deleteScreen() {
         try {
           await api('/api/me', { method: 'DELETE', body: { confirm: nick.value } });
           store.del('rr_token');
-          Object.assign(state, { token: null, student: null, task: null, hint: null, input: '' });
+          Object.assign(state, { token: null, student: null, task: null, steps: [], stepsEs: [], hintLevel: 0, input: '' });
           show(
             h('div', { class: 'card stack center' }, h('h2', { text: 'Your data is deleted' }), h('p', { text: 'Your designs, wardrobe and practice history are gone from Runway Rally.' })),
             h('button', { class: 'primary', text: 'OK', onclick: loginScreen }),
@@ -681,29 +688,45 @@ function numberPad(onChange) {
 function taskScreen() {
   const t = state.task;
   const { display, pad, setInput, onKey } = numberPad();
-  const hintLine = () => (useEs() && state.hintEs ? `Pista ${state.hintLevel}: ${state.hintEs}` : `Hint ${state.hintLevel}: ${state.hint}`);
-  const hintBox = h('div', { class: 'hint-box', hidden: !state.hint, lang: useEs() && state.hintEs ? 'es' : 'en' }, state.hint ? hintLine() : '');
+  // Hints build the method one step at a time; every step shown so far stays on screen.
+  const hintBox = h('div', { class: 'hint-box', 'aria-live': 'polite' });
   const msg = h('div', { role: 'alert' });
+  const lastNote = h('p', { class: 'muted small last-note', hidden: true });
   const hintBtn = h('button', {
-    text: L('💡 Hint', '💡 Pista'),
     onclick: async (e) => {
       if (e.detail) e.currentTarget.blur();
+      hintBtn.classList.remove('nudge');
       try {
         const r = await api('/api/hint', { method: 'POST', body: { taskId: t.id } });
-        state.hint = r.text;
-        state.hintEs = r.es?.text || null;
-        state.hintLevel = r.level;
-        hintBox.hidden = false;
-        hintBox.lang = useEs() && state.hintEs ? 'es' : 'en';
-        hintBox.textContent = hintLine();
-        if (r.level >= 3) hintBtn.disabled = true;
+        setSteps(r);
+        drawHints();
       } catch (e) {
         msg.replaceChildren(h('div', { class: 'feedback try', text: e.message }));
       }
     },
   });
-  if (state.hint) hintBtn.textContent = L('💡 More help', '💡 Más ayuda');
-  if (state.hintLevel >= 3) hintBtn.disabled = true;
+  function drawHints() {
+    const es = useEs() && state.stepsEs.length === state.steps.length;
+    const steps = es ? state.stepsEs : state.steps;
+    hintBox.hidden = !steps.length;
+    hintBox.lang = es ? 'es' : 'en';
+    hintBox.replaceChildren(
+      h('p', { class: 'hint-head', text: L('Step by step', 'Paso a paso') }),
+      h('ol', { class: 'steps' }, steps.map((x, i) => h('li', { class: i === steps.length - 1 ? 'new' : '', text: x }))),
+    );
+    const n = state.hintLevel;
+    hintBtn.textContent = n === 0 ? L('💡 Hint', '💡 Pista') : n === 1 ? L('💡 Next step', '💡 Siguiente paso') : L('💡 Show answer', '💡 Ver respuesta');
+    hintBtn.disabled = n >= 3;
+    lastNote.hidden = n !== 2;
+    lastNote.textContent = L('The last step shows the answer, so it will not count as right. Try it with the steps above first.', 'El último paso muestra la respuesta, así que no contará como correcta. Inténtalo primero con los pasos de arriba.');
+  }
+  drawHints();
+  // Stuck: nothing typed for a while and no hint yet, so point to the next step.
+  const nudge = () => {
+    if (state.input || state.hintLevel >= 2 || state.task !== t) return;
+    hintBtn.classList.add('nudge');
+    msg.replaceChildren(h('div', { class: 'feedback try', text: L('Stuck? Tap the hint for the next step.', '¿Atascado? Toca la pista para ver el siguiente paso.') }));
+  };
   const check = h('button', {
     class: 'primary',
     text: L('Check', 'Revisar'),
@@ -721,6 +744,10 @@ function taskScreen() {
           setTimeout(() => display.classList.remove('shake'), 400);
           const es = useEs() && r.es?.feedback;
           msg.replaceChildren(h('div', { class: 'feedback try', lang: es ? 'es' : 'en', text: es || r.feedback }));
+          if (r.hint) {
+            setSteps({ ...r.hint, ...(r.es?.hint ? { es: r.es.hint } : {}) }); // the next step of the method shows on its own
+            drawHints();
+          }
           state.busy = false;
           setInput('');
         } else {
@@ -753,6 +780,8 @@ function taskScreen() {
       { class: 'card stack pop' },
       esToggle(taskScreen),
       t.review ? h('span', { class: 'badge', text: L('Quick review', 'Repaso rápido') }) : null,
+      t.likeIt ? h('span', { class: 'badge', text: L('Try one like it', 'Intenta uno parecido') }) : null,
+      t.mixed && !t.review ? h('span', { class: 'badge', text: L('Mixed practice', 'Práctica mixta') }) : null,
       t.fromTeacher ? h('span', { class: 'badge', text: L('From your teacher', 'De tu docente') }) : null,
       ...promptNodes(t.prompt, t.es?.prompt),
       formTip ? h('p', { class: 'muted small', text: formTip }) : null,
@@ -760,6 +789,7 @@ function taskScreen() {
     ),
     display,
     hintBox,
+    lastNote,
     msg,
     pad,
     h('div', { class: 'row answer-actions' }, hintBtn, check),
@@ -767,6 +797,7 @@ function taskScreen() {
   show(...nodes);
   check.style.flex = '1';
   hintBtn.style.flex = '1';
+  state.stuckTimer = setTimeout(nudge, STUCK_SECONDS * 1000);
   // attach after show(), which clears the previous screen's handler
   state.keyHandler = (e) => {
     if (e.target instanceof HTMLButtonElement && e.key === 'Enter') return; // let a focused button handle its own Enter
@@ -775,6 +806,8 @@ function taskScreen() {
   };
   document.addEventListener('keydown', state.keyHandler);
 }
+
+const STUCK_SECONDS = 45;
 
 // ---------- skills check (placement) ----------
 async function startPlacement(restart) {
@@ -853,17 +886,19 @@ function celebrate(kind, anchor) {
   if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
   const layer = h('div', { class: `fx fx-${kind}`, 'aria-hidden': 'true' });
   const rnd = (a, b) => a + Math.random() * (b - a);
-  if (kind === 'right') {
+  if (kind === 'right' || kind === 'goal') {
+    const goal = kind === 'goal';
     const box = (anchor || document.body).getBoundingClientRect();
     const x = box.left + box.width / 2;
     const y = box.top + Math.min(box.height, 120) / 2;
-    for (let i = 0; i < 18; i++) {
-      const angle = (i / 18) * Math.PI * 2 + rnd(-0.2, 0.2);
-      const dist = rnd(80, 170);
-      const spark = h('span', { class: 'spark', text: i % 3 ? '✦' : '✧' });
+    const n = goal ? 24 : 18;
+    for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2 + rnd(-0.2, 0.2);
+      const dist = goal ? rnd(120, 230) : rnd(80, 170);
+      const spark = h('span', { class: 'spark', text: goal ? (i % 3 ? '★' : '🎯') : i % 3 ? '✦' : '✧' });
       spark.style.left = `${x}px`;
       spark.style.top = `${y}px`;
-      spark.style.color = i % 4 ? '#ffb800' : '#ff5fa8';
+      spark.style.color = goal ? FX_COLORS[i % FX_COLORS.length] : i % 4 ? '#ffb800' : '#ff5fa8';
       spark.style.setProperty('--dx', `${Math.cos(angle) * dist}px`);
       spark.style.setProperty('--dy', `${Math.sin(angle) * dist}px`);
       spark.style.setProperty('--size', `${rnd(18, 32)}px`);
@@ -886,7 +921,7 @@ function celebrate(kind, anchor) {
     for (const card of document.querySelectorAll('.new-piece, .unlock-item')) card.classList.add('glow');
   }
   document.body.append(layer);
-  setTimeout(() => layer.remove(), kind === 'right' ? 1200 : 3600);
+  setTimeout(() => layer.remove(), kind === 'piece' ? 3600 : 1200);
 }
 
 function resultScreen(r) {
@@ -903,8 +938,11 @@ function resultScreen(r) {
       h('p', { class: 'reward', text: es ? `+${r.thread} de hilo` : `+${r.thread} Thread` }),
     );
   const kids = [esToggle(() => resultScreen(r)), card];
-  for (const u of r.unlocked) kids.push(h('div', { class: 'unlock unlock-item pop', text: `New item unlocked: ${u.name}` }));
-  for (const k of r.newlyUnlockedSkills || []) kids.push(h('div', { class: 'unlock pop', text: `New skill opened: ${names[k]}` }));
+  if (r.likeItNext && !r.commissionComplete) kids.push(h('p', { class: 'muted center', text: L('Next: one like it, so you can use these steps yourself.', 'Ahora: uno parecido, para que uses estos pasos tú solo.') }));
+  if (r.goalMet) kids.push(h('div', { class: 'unlock goal-banner pop', text: L(`🎯 Daily goal met! ${r.goalMet.goal} problems today. +${r.goalMet.bonus} Thread`, `🎯 ¡Meta diaria cumplida! ${r.goalMet.goal} problemas hoy. +${r.goalMet.bonus} de hilo`) }));
+  else if (r.today && !r.today.met) kids.push(h('p', { class: 'muted small center', text: L(`Today's goal: ${r.today.answered} of ${r.today.goal} problems`, `Meta de hoy: ${r.today.answered} de ${r.today.goal} problemas`) }));
+  for (const u of r.unlocked) kids.push(h('div', { class: 'unlock unlock-item pop', text: L(`New item unlocked: ${u.name}`, `Nueva pieza desbloqueada: ${u.name}`) }));
+  for (const k of r.newlyUnlockedSkills || []) kids.push(h('div', { class: 'unlock pop', text: L(`New skill opened: ${names[k]}`, `Nueva habilidad: ${names[k]}`) }));
   const nodes = [h('div', { class: 'topbar' }, h('div', { class: 'pill', text: state.student.nickname }), h('div', { class: 'row' }, soundToggle(), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` }))), ...kids];
   if (r.unlocked.length) nodes.push(h('div', { class: 'card avatar-wrap' }, avatar()));
   const next = h('button', {
@@ -912,9 +950,7 @@ function resultScreen(r) {
     text: r.commissionComplete ? (r.reward ? L('See your new piece', 'Ver tu pieza nueva') : L('See how you did', 'Ver cómo te fue')) : L('Next', 'Siguiente'),
     onclick: () => {
       state.busy = false;
-      state.hint = null;
-      state.hintEs = null;
-      state.hintLevel = 0;
+      setSteps(null);
       state.input = '';
       state.story = '';
       state.storyEs = '';
@@ -931,6 +967,7 @@ function resultScreen(r) {
   next.focus();
   if (r.correct && !r.revealed) celebrate('right', card);
   if (r.unlocked.length) celebrate('piece');
+  else if (r.goalMet) celebrate('goal', document.querySelector('.goal-banner'));
 }
 
 // A good commission earns the next piece, already on the designer. One tap takes it off again
@@ -993,6 +1030,19 @@ function rewardScreen(r) {
   );
   done.focus();
   celebrate('piece');
+}
+
+// Today's goal on the home screen: a few problems a day builds the habit.
+function goalCard(today) {
+  if (!today) return null;
+  const pct = Math.min(100, Math.round((100 * today.answered) / today.goal));
+  return h(
+    'div',
+    { class: `card goal ${today.met ? 'met' : ''}` },
+    h('div', { class: 'row between' }, h('strong', { text: today.met ? '🎯 Goal met today!' : "🎯 Today's goal" }), h('span', { class: 'muted', text: `${Math.min(today.answered, today.goal)} of ${today.goal} problems` })),
+    h('div', { class: 'track', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': "Today's goal" }, Object.assign(h('div', { class: 'fill' }), { style: `width:${pct}%` })),
+    today.met ? h('p', { class: 'muted small', text: 'Nice work. Come back tomorrow to keep it going.' }) : null,
+  );
 }
 
 // Shown once a day after a solid session: a natural place to stop.

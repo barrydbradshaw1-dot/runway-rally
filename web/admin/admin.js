@@ -18,7 +18,8 @@ let ltiSession = fromLti ? fromLti[1] : (() => {
     return '';
   }
 })();
-const authHeaders = () => (ltiSession ? { 'x-lti-session': ltiSession } : { 'x-admin-token': state.token });
+// The time zone goes along so "this week" and "last played" follow the teacher's clock.
+const authHeaders = () => ({ ...(ltiSession ? { 'x-lti-session': ltiSession } : { 'x-admin-token': state.token }), 'x-tz-offset': String(new Date().getTimezoneOffset()) });
 
 const state = {
   me: null,
@@ -615,6 +616,137 @@ const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const pct = (m) => `${Math.round(m * 100)}%`;
 const cls = (m, started) => (!started ? 'none' : m < 0.35 ? 'low' : m < 0.6 ? 'mid' : 'high');
 
+function niceDay(iso, lang = 'en') {
+  if (!iso) return lang === 'es' ? 'todavía no' : 'not yet';
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// ---------- weekly reports for families ----------
+// Built on request from what is already kept, shown here, then printed or saved as a PDF by the
+// teacher. Runway Rally never emails a report and keeps no parent contact details.
+const REPORT_TEXT = {
+  en: {
+    title: 'Weekly math practice report',
+    week: (a, b) => `Week of ${a} to ${b}`,
+    minutes: 'minutes practiced',
+    days: 'days practiced',
+    problems: 'problems answered',
+    right: 'answered right',
+    goal: (n, g) => `Daily goal (${g} problems) met on ${n} of 7 days`,
+    dayByDay: 'Day by day',
+    problemsShort: 'problems',
+    improved: 'Got better this week',
+    working: 'Working on now',
+    help: 'Could use a hand',
+    helpTip: 'Sit together for one round of practice on these and ask for the thinking out loud. That helps more than giving the answer.',
+    strong: 'Strong skills',
+    none: 'No practice this week yet.',
+    atHome: 'How to help at home',
+    tips: [
+      'Ten to fifteen minutes most days works better than one long session. The daily goal in the game is 10 problems.',
+      'Ask your student to explain one problem to you. Explaining it builds understanding.',
+      'When a problem is hard, the game shows hints one step at a time. Encourage trying each step before the last hint, which gives the answer.',
+    ],
+    lastPlayed: (d) => `Last played: ${d}`,
+    footer: 'Percentages show how steady a skill is, not a grade. Codes like 7.PAR.3 are Georgia K-12 Mathematics Standards, so you can match them to what is taught in class.',
+    from: 'Runway Rally math practice',
+  },
+  es: {
+    title: 'Informe semanal de práctica de matemáticas',
+    week: (a, b) => `Semana del ${a} al ${b}`,
+    minutes: 'minutos de práctica',
+    days: 'días de práctica',
+    problems: 'problemas respondidos',
+    right: 'respuestas correctas',
+    goal: (n, g) => `Meta diaria (${g} problemas) cumplida ${n} de 7 días`,
+    dayByDay: 'Día por día',
+    problemsShort: 'problemas',
+    improved: 'Mejoró esta semana',
+    working: 'Practicando ahora',
+    help: 'Le vendría bien ayuda',
+    helpTip: 'Siéntense juntos para una ronda de práctica en estos temas y pídale que explique su razonamiento en voz alta. Eso ayuda más que darle la respuesta.',
+    strong: 'Habilidades fuertes',
+    none: 'Todavía no hay práctica esta semana.',
+    atHome: 'Cómo ayudar en casa',
+    tips: [
+      'De diez a quince minutos casi todos los días funciona mejor que una sesión larga. La meta diaria del juego es de 10 problemas.',
+      'Pídale a su estudiante que le explique un problema. Explicarlo ayuda a entenderlo.',
+      'Cuando un problema es difícil, el juego da pistas paso a paso. Anímele a intentar cada paso antes de la última pista, que da la respuesta.',
+    ],
+    lastPlayed: (d) => `Última vez que practicó: ${d}`,
+    footer: 'Los porcentajes muestran qué tan firme está cada habilidad; no son una calificación. Los códigos como 7.PAR.3 son los Estándares de Matemáticas K-12 de Georgia, para que pueda compararlos con lo que se enseña en clase.',
+    from: 'Práctica de matemáticas Runway Rally',
+  },
+};
+
+function reportCard(r, lang, classTitle) {
+  const T = REPORT_TEXT[lang];
+  const name = (g) => (lang === 'es' && g.nameEs ? g.nameEs : g.name);
+  const tag = (g) => (g.standard ? `${g.grade ? `${lang === 'es' ? 'Grado' : 'Grade'} ${g.grade} · ` : ''}GA ${g.standard}` : '');
+  const row = (g, right) => h('li', {}, h('span', {}, name(g), h('span', { class: 'sub', text: tag(g) })), h('span', { class: 'right', text: right }));
+  const w = r.thisWeek;
+  const acc = w.answered ? `${Math.round((100 * w.correct) / w.answered)}%` : '—';
+  const section = (title, ...body) => h('section', { class: 'rsec' }, h('h3', { text: title }), ...body);
+  const short = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric' });
+  const dayName = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { weekday: 'short' });
+  return h(
+    'article',
+    { class: 'report', lang },
+    h('header', {}, h('p', { class: 'sub', text: `${T.from}${classTitle ? ` · ${classTitle}` : ''}` }), h('h2', { text: `${T.title}: ${r.nickname}` }), h('p', { class: 'sub', text: `${T.week(short(r.from), short(r.to))} · ${T.lastPlayed(niceDay(r.lastActive, lang))}` })),
+    h(
+      'div',
+      { class: 'rstats' },
+      [[w.minutes, T.minutes], [w.daysActive, T.days], [w.answered, T.problems], [acc, T.right]].map(([n, l]) => h('div', {}, h('strong', { text: String(n) }), h('span', { text: l }))),
+    ),
+    h('p', { class: 'rgoal', text: `🎯 ${T.goal(r.goalDays, r.goal)}` }),
+    h(
+      'table',
+      { class: 'rdays' },
+      h('caption', { text: T.dayByDay }),
+      h('tr', {}, r.days.map((d) => h('th', { scope: 'col', text: dayName(d.day) }))),
+      h('tr', {}, r.days.map((d) => h('td', { text: d.answered ? `${d.answered}${d.goalMet ? ' ✓' : ''}` : '–', title: `${d.answered} ${T.problemsShort}` }))),
+    ),
+    w.answered === 0 ? h('p', { text: T.none }) : null,
+    r.improved.length ? section(T.improved, h('ul', {}, r.improved.map((g) => row(g, `${g.from}% → ${g.to}%`)))) : null,
+    r.workingOn.length ? section(T.working, h('ul', {}, r.workingOn.map((g) => row(g, `${g.percent}%`)))) : null,
+    r.needsHelp.length ? section(T.help, h('p', { class: 'sub', text: T.helpTip }), h('ul', {}, r.needsHelp.map((g) => row(g, `${g.percent}%`)))) : null,
+    r.strong.length ? section(T.strong, h('p', { text: (lang === 'es' ? r.strongEs : r.strong).join(', ') })) : null,
+    section(T.atHome, h('ul', { class: 'tips' }, T.tips.map((t) => h('li', { text: t })))),
+    h('p', { class: 'sub', text: T.footer }),
+  );
+}
+
+async function reportScreen(student) {
+  clearInterval(state.timer); // the class page refreshes itself; a report should stay put while it is read or printed
+  const base = `/api/admin/class/${encodeURIComponent(state.code)}`;
+  let data;
+  try {
+    data = await api(student ? `${base}/student/${student.id}/report` : `${base}/reports`);
+  } catch (e) {
+    alert(e.message);
+    return reload();
+  }
+  let lang = student?.spanishFirst ? 'es' : 'en';
+  const list = h('div', { class: 'reports' });
+  const langBtn = (code, label) => h('button', { class: 'ghost', 'aria-pressed': String(lang === code), text: label, onclick: () => { lang = code; render(); } });
+  const bar = h('div', { class: 'row' });
+  function render() {
+    bar.replaceChildren(langBtn('en', 'English'), langBtn('es', 'Español'));
+    list.replaceChildren(...data.reports.map((r) => reportCard(r, lang, data.title)));
+  }
+  render();
+  show(
+    h(
+      'div',
+      { class: 'head noprint' },
+      h('div', {}, h('h1', { text: student ? `Weekly report: ${student.nickname}` : `Weekly reports: ${data.reports.length} ${data.reports.length === 1 ? 'student' : 'students'}` }), h('p', { class: 'stamp', text: 'Print these, or choose "Save as PDF" in the print window, to send home. Runway Rally does not email anyone. Reports show the nickname only, so add the student\'s name by hand if you need to.' })),
+      h('div', { class: 'actions' }, bar, h('button', { class: 'primary', text: 'Print or save as PDF', onclick: () => window.print() }), h('button', { class: 'ghost', text: 'Back to class', onclick: () => reload() })),
+    ),
+    h('p', { class: 'muted noprint', text: 'The Spanish version was drafted by machine. Please have a Spanish speaker read it once before relying on it.' }),
+    list,
+  );
+}
+
 function sortedStudents(list, skillIds) {
   const arr = list.slice();
   if (state.sort === 'name') arr.sort((a, b) => a.nickname.localeCompare(b.nickname));
@@ -632,9 +764,9 @@ function csvCell(v) {
 function exportCsv() {
   const { students, skills } = state.data;
   const ids = Object.keys(skills);
-  const rows = [['Nickname', 'Answered', 'Accuracy %', 'Commissions', ...ids.map((k) => `${skills[k]}${state.data.skillInfo?.[k] ? ` (${state.data.skillInfo[k].standard})` : ''} mastery %`), ...ids.map((k) => `${skills[k]} answered`), 'Favorite areas', 'Needs help with']];
+  const rows = [['Nickname', 'Answered', 'Accuracy %', 'Commissions', ...ids.map((k) => `${skills[k]}${state.data.skillInfo?.[k] ? ` (${state.data.skillInfo[k].standard})` : ''} mastery %`), ...ids.map((k) => `${skills[k]} answered`), 'Daily goal met (last 7 days)', 'Last played', 'Favorite areas', 'Needs help with']];
   for (const s of sortedStudents(students, ids)) {
-    rows.push([s.nickname, s.answered, s.accuracy ?? '', s.commissions, ...ids.map((k) => ((s.attempts?.[k] ?? 0) > 0 ? Math.round(s.mastery[k] * 100) : '')), ...ids.map((k) => s.attempts?.[k] ?? 0), s.topAreas.map((a) => AREA_LABELS[a] || a).join('; '), s.needsHelpWith.map((k) => skills[k]).join('; ')]);
+    rows.push([s.nickname, s.answered, s.accuracy ?? '', s.commissions, ...ids.map((k) => ((s.attempts?.[k] ?? 0) > 0 ? Math.round(s.mastery[k] * 100) : '')), ...ids.map((k) => s.attempts?.[k] ?? 0), s.goalDaysThisWeek ?? '', s.lastActive ?? '', s.topAreas.map((a) => AREA_LABELS[a] || a).join('; '), s.needsHelpWith.map((k) => skills[k]).join('; ')]);
   }
   const blob = new Blob([rows.map((r) => r.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
   const a = h('a', { href: URL.createObjectURL(blob), download: `runway-rally-${state.data.classCode}.csv` });
@@ -657,6 +789,7 @@ function dashboard() {
 
   const refresh = h('button', { text: 'Refresh', onclick: reload });
   const csv = h('button', { text: 'Export CSV', onclick: exportCsv, disabled: !students.length });
+  const reports = h('button', { text: 'Weekly reports', title: 'Progress reports for families, to print or save as PDF', onclick: () => reportScreen(null), disabled: !students.length });
   const out = h('button', { class: 'ghost', text: 'Sign out', onclick: signOut });
   const back = ltiSession ? null : h('button', { class: 'ghost', text: 'All classes', onclick: () => classesScreen().catch((e) => alert(e.message)) });
   const sort = h(
@@ -672,11 +805,27 @@ function dashboard() {
     .filter((g) => g.who.length);
 
   const notStarted = students.filter((s) => s.answered === 0).map((s) => s.nickname);
+  // Alerts: someone stuck right now (3 misses in a row) or gone quiet (played before, nothing in a week).
+  const stuck = students.filter((s) => s.stuckOn?.length);
+  const quiet = students.filter((s) => s.quiet);
+  const checkIn = stuck.length || quiet.length
+    ? h(
+        'section',
+        { class: 'panel alert', 'aria-labelledby': 'c-h' },
+        h('h2', { id: 'c-h', text: 'Check in with' }),
+        stuck.length
+          ? h('div', { class: 'stack' }, h('p', { class: 'muted', text: 'Stuck right now: 3 misses in a row on a skill. A quick word or a worked example usually gets them moving.' }), h('div', { class: 'names' }, stuck.map((s) => h('span', { class: 'chip warn', text: `${s.nickname}: ${s.stuckOn.map((k) => skills[k] || k).join(', ')}` }))))
+          : null,
+        quiet.length
+          ? h('div', { class: 'stack' }, h('p', { class: 'muted', text: 'Gone quiet: played before, but not in the last 7 days.' }), h('div', { class: 'names' }, quiet.map((s) => h('span', { class: 'chip idle', text: `${s.nickname}: last played ${niceDay(s.lastActive)}` }))))
+          : null,
+      )
+    : null;
 
   const table = h(
     'table',
     {},
-    h('thead', {}, h('tr', {}, h('th', { text: 'Student' }), ids.map((k) => h('th', {}, skills[k], state.data.skillInfo?.[k] ? h('span', { class: 'sub', text: `GA ${state.data.skillInfo[k].standard}` }) : null)), h('th', { text: 'Accuracy' }), h('th', { text: 'Recent accuracy' }), h('th', { text: 'Skills check' }), h('th', { text: 'Commissions' }), h('th', { text: 'Favorite areas' }), h('th', { text: '' }))),
+    h('thead', {}, h('tr', {}, h('th', { text: 'Student' }), ids.map((k) => h('th', {}, skills[k], state.data.skillInfo?.[k] ? h('span', { class: 'sub', text: `GA ${state.data.skillInfo[k].standard}` }) : null)), h('th', { text: 'Accuracy' }), h('th', { text: 'Recent accuracy' }), h('th', { text: 'Skills check' }), h('th', { text: 'Commissions' }), h('th', { text: 'Daily goal met' }), h('th', { text: 'Last played' }), h('th', { text: 'Favorite areas' }), h('th', { text: '' }))),
     h(
       'tbody',
       {},
@@ -695,6 +844,8 @@ function dashboard() {
           h('td', { text: s.recentAccuracy === null || s.recentAccuracy === undefined ? '—' : `${s.recentAccuracy}%` }),
           h('td', { text: s.placement || '—' }),
           h('td', { text: String(s.commissions) }),
+          h('td', { text: s.goalDaysThisWeek === undefined ? '—' : `${s.goalDaysThisWeek} of last 7 days` }),
+          h('td', { class: s.quiet ? 'quietcell' : '', text: niceDay(s.lastActive) }),
           h('td', { text: s.topAreas.length ? s.topAreas.map((a) => AREA_LABELS[a] || a).join(', ') : '—' }),
           h(
             'td',
@@ -702,6 +853,7 @@ function dashboard() {
             s.id && state.data.spanish
               ? h('button', { class: 'ghost small', text: s.spanishFirst ? 'Spanish first: on' : 'Spanish first: off', 'aria-pressed': s.spanishFirst ? 'true' : 'false', 'aria-label': `Spanish first for ${s.nickname}`, onclick: () => setSpanishFirst(s) })
               : null,
+            s.id ? h('button', { class: 'ghost small', text: 'Weekly report', 'aria-label': `Weekly report for ${s.nickname}`, onclick: () => reportScreen(s) }) : null,
             s.id ? h('button', { class: 'ghost small', text: 'Rename', 'aria-label': `Rename ${s.nickname}`, onclick: () => renameStudent(s) }) : null,
             s.id && state.data.kind !== 'lti' ? h('button', { class: 'ghost small', text: 'New sign-in code', 'aria-label': `New sign-in code for ${s.nickname}`, onclick: () => newSignInCode(s) }) : null,
             s.id ? h('button', { class: 'ghost small', text: 'Download data', 'aria-label': `Download data for ${s.nickname}`, onclick: () => exportStudent(s) }) : null,
@@ -713,7 +865,7 @@ function dashboard() {
   );
 
   show(
-    h('div', { class: 'head' }, h('div', {}, h('h1', { text: title ? title : `Class ${classCode}` }), rosterLine ? h('p', { class: 'stamp', text: rosterLine }) : null, h('p', { class: 'stamp', text: `Updated ${state.fetchedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · refreshes every 30 seconds` })), h('div', { class: 'actions' }, back, refresh, csv, out)),
+    h('div', { class: 'head' }, h('div', {}, h('h1', { text: title ? title : `Class ${classCode}` }), rosterLine ? h('p', { class: 'stamp', text: rosterLine }) : null, h('p', { class: 'stamp', text: `Updated ${state.fetchedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · refreshes every 30 seconds` })), h('div', { class: 'actions' }, back, refresh, reports, csv, out)),
     h(
       'div',
       { class: 'stats' },
@@ -723,6 +875,7 @@ function dashboard() {
       h('div', { class: 'stat' }, h('div', { class: 'n', text: String(students.reduce((a, s) => a + s.commissions, 0)) }), h('div', { class: 'l', text: 'Commissions finished' })),
       h('div', { class: 'stat' }, h('div', { class: 'n', text: String(needHelp.length) }), h('div', { class: 'l', text: 'Need support' })),
     ),
+    checkIn,
     h(
       'section',
       { class: 'panel', 'aria-labelledby': 'g-h' },

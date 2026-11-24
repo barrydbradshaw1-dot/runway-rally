@@ -29,6 +29,8 @@ import {
   applyPlacementAnswer,
   finishPlacement,
   progressSummary,
+  weeklyReport,
+  dailyGoal,
   setLook,
 } from './logic.js';
 import { createProspects, buildPitch } from './prospects.js';
@@ -130,7 +132,8 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
   const trustProxy = env.TRUST_PROXY === '1';
   const ltiConfig = loadLtiConfig(env);
   const lti = createLtiService({ store, config: ltiConfig, fetchImpl, now });
-  const pub = (s) => ({ ...publicStudent(s), viaLti: Boolean(s.lti) });
+  const pubBase = (s) => ({ ...publicStudent(s), viaLti: Boolean(s.lti) });
+  const pub = pubBase;
   const clock = () => (now ? now() : Date.now());
   // The browser sends its time zone offset (minutes behind UTC) so days and streaks follow her clock.
   const tzOf = (req) => {
@@ -487,6 +490,26 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           { 'content-disposition': `attachment; filename="runway-rally-${code}-${String(s.nickname || 'student').replace(/[^A-Za-z0-9_-]/g, '_')}-${day}.json"` },
         );
       }
+      // Weekly progress reports for families, one student or the whole class. Built from what is
+      // already kept; the teacher prints them or saves them as a PDF. Nothing is emailed or stored.
+      if ((rest.length === 4 && rest[1] === 'student' && UUID.test(rest[2]) && rest[3] === 'report') || (rest.length === 2 && rest[1] === 'reports')) {
+        const one = rest.length === 4;
+        let list;
+        if (one) {
+          const s = await store.getStudent(rest[2]);
+          if (!s || s.classCode !== code) throw new HttpError(404, 'that student is not in this class');
+          list = [s];
+        } else list = await store.listClass(code);
+        const cls = await store.getClass(code);
+        await store.addAudit(actorOf(who), 'weekly_report', { classCode: code, students: list.length });
+        const at = { now: clock(), tz: tzOf(req) };
+        return send(res, 200, {
+          classCode: code,
+          title: cls?.contextTitle || cls?.name || null,
+          spanish: cls?.spanish === true,
+          reports: list.map((s) => weeklyReport(s, at)).sort((a, b) => a.nickname.localeCompare(b.nickname)),
+        });
+      }
       if (rest.length !== 1) throw new HttpError(404, 'not found');
       const list = await store.listClass(code);
       const cls = await store.getClass(code);
@@ -502,7 +525,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
         kind: cls ? classOut(cls).kind : 'unregistered',
         skills: CATALOG.skills,
         skillInfo: CATALOG.skillInfo,
-        students: classSummary(list),
+        students: classSummary(list, { now: clock(), tz: tzOf(req) }),
         assignments: (cls?.assignments || []).map(assignmentOut),
         homework: { photos: Boolean(photoReader) },
       };
@@ -731,6 +754,8 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     return withLock(me.id, async () => {
       const student = normalizeStudent(await store.getStudentByTokenHash(sha256(/Bearer (\S+)/.exec(req.headers.authorization)[1])));
       const tz = tzOf(req);
+      // the signed-in student, plus today's goal on her own clock
+      const pub = (s) => ({ ...pubBase(s), today: dailyGoal(s, { now: clock(), tz }) });
 
       if (method === 'GET' && path === '/api/state') {
         return send(res, 200, { student: pub(student), catalog: CATALOG, assignments: await liveAssignments(student) });
