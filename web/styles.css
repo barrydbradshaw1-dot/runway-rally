@@ -98,6 +98,7 @@ label { display: grid; gap: 6px; font-weight: 600; }
   box-shadow: 0 2px 8px #6a4cff1a;
 }
 .thread { color: #b0611a; }
+.notyou { padding: 8px 10px; min-height: 40px; text-decoration: underline; }
 
 /* home hub */
 .hub { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
