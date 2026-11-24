@@ -273,6 +273,16 @@ async function renameStudent(s) {
   }
 }
 
+async function newSignInCode(s) {
+  if (!confirm(`Make a new sign-in code for ${s.nickname}? Their old code stops working. Use this when they lost theirs.`)) return;
+  try {
+    const r = await api(`/api/admin/class/${encodeURIComponent(state.code)}/student/${s.id}/sign-in-code`, { method: 'POST' });
+    prompt(`New sign-in code for ${r.nickname}. Give it to them, and they tap "Played before? Use your sign-in code".`, r.recoveryCode);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 async function exportStudent(s) {
   try {
     await download(`/api/admin/class/${encodeURIComponent(state.code)}/student/${s.id}/export`);
@@ -359,7 +369,7 @@ function managePanel() {
     kind === 'manual' ? h('div', { class: 'row' }, h('label', {}, 'Last day of class', end), save) : null,
     approval,
     retentionNote(),
-    h('p', { class: 'muted', text: "Download data on a student's row gives everything kept about that student, for a parent's request to see it. Rename fixes a nickname that is unkind or is a real name." }),
+    h('p', { class: 'muted', text: "Download data on a student's row gives everything kept about that student, for a parent's request to see it. Rename fixes a nickname that is unkind or is a real name. New sign-in code helps a student who lost theirs." }),
     h('p', { class: 'muted', text: `To delete everything for this class, type ${classCode} and press Delete. Every student in it and all their answers are removed for good.` }),
     h('div', { class: 'row' }, typed, del),
   );
@@ -681,6 +691,7 @@ function dashboard() {
             'td',
             { class: 'rowactions' },
             s.id ? h('button', { class: 'ghost small', text: 'Rename', 'aria-label': `Rename ${s.nickname}`, onclick: () => renameStudent(s) }) : null,
+            s.id && state.data.kind !== 'lti' ? h('button', { class: 'ghost small', text: 'New sign-in code', 'aria-label': `New sign-in code for ${s.nickname}`, onclick: () => newSignInCode(s) }) : null,
             s.id ? h('button', { class: 'ghost small', text: 'Download data', 'aria-label': `Download data for ${s.nickname}`, onclick: () => exportStudent(s) }) : null,
             s.id ? h('button', { class: 'ghost small', text: 'Delete', 'aria-label': `Delete ${s.nickname}`, onclick: () => deleteStudent(s) }) : null,
           ),
