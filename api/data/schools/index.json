@@ -6,7 +6,9 @@
    "assessmentYear": 2020,
    "districts": 43,
    "schools": 236,
-   "stateMath": 24.6
+   "stateMath": 24.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 38.6
   },
   "GA": {
    "builtAt": "2026-11-24",
@@ -14,7 +16,499 @@
    "assessmentYear": 2020,
    "districts": 236,
    "schools": 2329,
-   "stateMath": 33.5
+   "stateMath": 33.5,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 42.4
+  },
+  "AL": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 155,
+   "schools": 1532,
+   "stateMath": 17.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 44.4
+  },
+  "AK": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 53,
+   "schools": 488,
+   "stateMath": 29,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 30.3
+  },
+  "AZ": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 656,
+   "schools": 2432,
+   "stateMath": 29.3,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 39
+  },
+  "AR": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 290,
+   "schools": 1106,
+   "stateMath": 38.3,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 49.5
+  },
+  "CA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 2040,
+   "schools": 10303,
+   "stateMath": 31.9,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 37.4
+  },
+  "CO": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 186,
+   "schools": 1900,
+   "stateMath": 26.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 32.4
+  },
+  "CT": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 198,
+   "schools": 1007,
+   "stateMath": 35.3,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 44.9
+  },
+  "DC": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2018,
+   "districts": 63,
+   "schools": 245,
+   "stateMath": 25.5,
+   "previousAssessmentYear": null,
+   "previousStateMath": null
+  },
+  "FL": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 77,
+   "schools": 4186,
+   "stateMath": 49.9,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 59.4
+  },
+  "HI": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 1,
+   "schools": 296,
+   "stateMath": 27.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 38.7
+  },
+  "ID": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 190,
+   "schools": 796,
+   "stateMath": 37.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 43.1
+  },
+  "IL": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 958,
+   "schools": 4398,
+   "stateMath": 24.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 29.1
+  },
+  "IN": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 435,
+   "schools": 1919,
+   "stateMath": 29.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 41.3
+  },
+  "IA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 329,
+   "schools": 1318,
+   "stateMath": 64.8,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 69.6
+  },
+  "KS": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 290,
+   "schools": 1341,
+   "stateMath": 23.2,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 28.5
+  },
+  "KY": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 175,
+   "schools": 1550,
+   "stateMath": 27.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 46.4
+  },
+  "LA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 189,
+   "schools": 1308,
+   "stateMath": 25.4,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 60.8
+  },
+  "ME": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 211,
+   "schools": 589,
+   "stateMath": 81.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 33.5
+  },
+  "MD": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 25,
+   "schools": 1408,
+   "stateMath": 12.9,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 32.9
+  },
+  "MA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 397,
+   "schools": 1823,
+   "stateMath": 33.4,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 48.5
+  },
+  "MI": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 881,
+   "schools": 3468,
+   "stateMath": 33,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 37.9
+  },
+  "MN": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 544,
+   "schools": 2741,
+   "stateMath": 38.2,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 52.6
+  },
+  "MS": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 152,
+   "schools": 1019,
+   "stateMath": 37.1,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 47.9
+  },
+  "MO": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 565,
+   "schools": 2451,
+   "stateMath": 35.4,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 39.8
+  },
+  "MT": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 394,
+   "schools": 842,
+   "stateMath": 32.8,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 39.3
+  },
+  "NE": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 273,
+   "schools": 1097,
+   "stateMath": 46.2,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 50.2
+  },
+  "NV": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 20,
+   "schools": 735,
+   "stateMath": 24,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 32
+  },
+  "NH": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 197,
+   "schools": 501,
+   "stateMath": 34,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 46.2
+  },
+  "NJ": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 678,
+   "schools": 2557,
+   "stateMath": 24.8,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 43.6
+  },
+  "NM": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 154,
+   "schools": 879,
+   "stateMath": 13.4,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 18.9
+  },
+  "NY": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 1109,
+   "schools": 4810,
+   "stateMath": 39.1,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 45.6
+  },
+  "NC": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 335,
+   "schools": 2705,
+   "stateMath": 38.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 40.1
+  },
+  "ND": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 169,
+   "schools": 514,
+   "stateMath": 37.8,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 44.6
+  },
+  "OH": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 1007,
+   "schools": 3543,
+   "stateMath": 48.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 61.9
+  },
+  "OK": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 543,
+   "schools": 1781,
+   "stateMath": 18.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 29
+  },
+  "OR": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 206,
+   "schools": 1291,
+   "stateMath": 28.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 38.8
+  },
+  "PA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 753,
+   "schools": 2932,
+   "stateMath": 25.5,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 36.3
+  },
+  "RI": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 64,
+   "schools": 313,
+   "stateMath": 18.2,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 26.5
+  },
+  "SC": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 92,
+   "schools": 1277,
+   "stateMath": 31.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 38.7
+  },
+  "SD": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 151,
+   "schools": 706,
+   "stateMath": 39.5,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 43.8
+  },
+  "TN": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 149,
+   "schools": 1913,
+   "stateMath": 26.4,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 37.9
+  },
+  "TX": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 1211,
+   "schools": 9192,
+   "stateMath": 36.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 51.4
+  },
+  "UT": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 155,
+   "schools": 1097,
+   "stateMath": 36.6,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 42.9
+  },
+  "VT": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 109,
+   "schools": 304,
+   "stateMath": 30.7,
+   "previousAssessmentYear": null,
+   "previousStateMath": null
+  },
+  "VA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 209,
+   "schools": 2126,
+   "stateMath": 52.1,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 80.9
+  },
+  "WA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2018,
+   "districts": 330,
+   "schools": 2543,
+   "stateMath": 48.3,
+   "previousAssessmentYear": null,
+   "previousStateMath": null
+  },
+  "WV": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 62,
+   "schools": 676,
+   "stateMath": 23.4,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 35.2
+  },
+  "WI": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 451,
+   "schools": 2190,
+   "stateMath": 34.1,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 39.6
+  },
+  "WY": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 62,
+   "schools": 360,
+   "stateMath": 48.7,
+   "previousAssessmentYear": 2018,
+   "previousStateMath": 54
   }
  }
 }
