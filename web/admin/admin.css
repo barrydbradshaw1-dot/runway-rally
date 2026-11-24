@@ -72,3 +72,7 @@ button.danger:disabled { opacity: 0.45; }
 .problem select, .problem input { font: inherit; min-height: 44px; border-radius: 12px; border: 2px solid #d8d0f5; padding: 0 10px; background: #fff; max-width: 100%; }
 .problem .grow { flex: 1; min-width: 220px; }
 .problem .chip.warn { color: #7a1030; }
+
+/* a link that looks like a ghost button (owner's "Sales targets") */
+a.button { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border-radius: 16px; font-weight: 650; text-decoration: none; color: var(--soft); }
+a.button:hover { background: #efe9ff; }
