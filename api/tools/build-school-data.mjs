@@ -38,9 +38,9 @@ async function getJson(url) {
         return null;
       }
       if (res.ok) return await res.json();
-      if (attempt >= 5 || (res.status < 500 && res.status !== 429)) throw new Error(`HTTP ${res.status} for ${url}`);
+      if (attempt >= 3 || (res.status < 500 && res.status !== 429)) throw new Error(`HTTP ${res.status} for ${url}`);
     } catch (err) {
-      if (attempt >= 5) throw err;
+      if (attempt >= 3) throw err;
     }
     await sleep(2000 * attempt);
   }
@@ -105,10 +105,20 @@ async function firstYearWithRows(years, pathFor) {
   return { year: null, rows: [] };
 }
 
+// Years the API does not have (it answers them with an error); learned on the first state, skipped after.
+const missingYears = new Set();
+
 async function middleGradeMath(level, idField, fips) {
   for (const y of ASSESSMENT_YEARS) {
+    if (missingYears.has(`${level}:${y}`)) continue;
     const byGrade = [];
-    for (const g of MIDDLE_GRADES) byGrade.push(await getAll(`${level}/edfacts/assessments/${y}/grade-${g}/?fips=${fips}`));
+    try {
+      for (const g of MIDDLE_GRADES) byGrade.push(await getAll(`${level}/edfacts/assessments/${y}/grade-${g}/?fips=${fips}`));
+    } catch (err) {
+      if (process.env.VERBOSE) console.log(`  ${level} assessments ${y}: ${err.message}`);
+      missingYears.add(`${level}:${y}`);
+      continue;
+    }
     const math = mathByGrade(byGrade, idField);
     if (math.size) return { year: y, math };
   }
