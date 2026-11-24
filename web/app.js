@@ -841,23 +841,65 @@ function placementDoneScreen(summary) {
   );
 }
 
+// Celebrations drawn over the screen, then removed. A right answer gets a quick burst of gold
+// sparkles from the answer card. A new piece gets a slower shower of coloured stars and hearts
+// from the top, and the piece's card glows. Skipped when the device asks for less motion.
+const FX_COLORS = ['#ffb800', '#ff5fa8', '#9b5cff', '#24c6a0', '#4aa8ff'];
+function celebrate(kind, anchor) {
+  if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const layer = h('div', { class: `fx fx-${kind}`, 'aria-hidden': 'true' });
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  if (kind === 'right') {
+    const box = (anchor || document.body).getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + Math.min(box.height, 120) / 2;
+    for (let i = 0; i < 18; i++) {
+      const angle = (i / 18) * Math.PI * 2 + rnd(-0.2, 0.2);
+      const dist = rnd(80, 170);
+      const spark = h('span', { class: 'spark', text: i % 3 ? '✦' : '✧' });
+      spark.style.left = `${x}px`;
+      spark.style.top = `${y}px`;
+      spark.style.color = i % 4 ? '#ffb800' : '#ff5fa8';
+      spark.style.setProperty('--dx', `${Math.cos(angle) * dist}px`);
+      spark.style.setProperty('--dy', `${Math.sin(angle) * dist}px`);
+      spark.style.setProperty('--size', `${rnd(18, 32)}px`);
+      spark.style.animationDelay = `${rnd(0, 0.08)}s`;
+      layer.append(spark);
+    }
+  } else {
+    const shapes = ['★', '✦', '♥', '✿', '✧'];
+    for (let i = 0; i < 36; i++) {
+      const bit = h('span', { class: 'confetti', text: shapes[i % shapes.length] });
+      bit.style.left = `${rnd(0, 100)}vw`;
+      bit.style.color = FX_COLORS[i % FX_COLORS.length];
+      bit.style.setProperty('--dx', `${rnd(-60, 60)}px`);
+      bit.style.setProperty('--spin', `${rnd(-540, 540)}deg`);
+      bit.style.setProperty('--size', `${rnd(16, 30)}px`);
+      bit.style.animationDuration = `${rnd(1.6, 2.6)}s`;
+      bit.style.animationDelay = `${rnd(0, 0.7)}s`;
+      layer.append(bit);
+    }
+    for (const card of document.querySelectorAll('.new-piece, .unlock-item')) card.classList.add('glow');
+  }
+  document.body.append(layer);
+  setTimeout(() => layer.remove(), kind === 'right' ? 1200 : 3600);
+}
+
 function resultScreen(r) {
   const cls = r.correct ? 'good' : 'reveal';
   const names = state.catalog.skills;
   const es = useEs() && r.es ? r.es : null;
   const steps = es?.steps || r.steps;
-  const kids = [
-    esToggle(() => resultScreen(r)),
-    h(
+  const card = h(
       'div',
       { class: `feedback ${cls} pop stack`, lang: es ? 'es' : 'en' },
       h('p', { text: es?.feedback || r.feedback }),
       r.correct ? null : h('p', { text: es ? `La respuesta es ${r.revealedAnswer}. Así se resuelve:` : `The answer is ${r.revealedAnswer}. Here is how:` }),
       r.correct || !steps ? null : h('ol', { class: 'steps' }, steps.map((step) => h('li', { text: step }))),
       h('p', { class: 'reward', text: es ? `+${r.thread} de hilo` : `+${r.thread} Thread` }),
-    ),
-  ];
-  for (const u of r.unlocked) kids.push(h('div', { class: 'unlock pop', text: `New item unlocked: ${u.name}` }));
+    );
+  const kids = [esToggle(() => resultScreen(r)), card];
+  for (const u of r.unlocked) kids.push(h('div', { class: 'unlock unlock-item pop', text: `New item unlocked: ${u.name}` }));
   for (const k of r.newlyUnlockedSkills || []) kids.push(h('div', { class: 'unlock pop', text: `New skill opened: ${names[k]}` }));
   const nodes = [h('div', { class: 'topbar' }, h('div', { class: 'pill', text: state.student.nickname }), h('div', { class: 'row' }, soundToggle(), h('div', { class: 'pill thread', text: `🧵 ${state.student.thread}` }))), ...kids];
   if (r.unlocked.length) nodes.push(h('div', { class: 'card avatar-wrap' }, avatar()));
@@ -883,6 +925,8 @@ function resultScreen(r) {
   nodes.push(next);
   show(...nodes);
   next.focus();
+  if (r.correct && !r.revealed) celebrate('right', card);
+  if (r.unlocked.length) celebrate('piece');
 }
 
 // A good commission earns the next piece, already on the designer. One tap takes it off again
@@ -944,6 +988,7 @@ function rewardScreen(r) {
     r.repaired ? h('p', { class: 'muted center', text: 'You strengthened a building-block skill. Nice.' }) : null,
   );
   done.focus();
+  celebrate('piece');
 }
 
 // Shown once a day after a solid session: a natural place to stop.
