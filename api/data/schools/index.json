@@ -1,0 +1,20 @@
+{
+ "states": {
+  "DE": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 43,
+   "schools": 236,
+   "stateMath": 24.6
+  },
+  "GA": {
+   "builtAt": "2026-11-24",
+   "directoryYear": 2024,
+   "assessmentYear": 2020,
+   "districts": 236,
+   "schools": 2329,
+   "stateMath": 33.5
+  }
+ }
+}
