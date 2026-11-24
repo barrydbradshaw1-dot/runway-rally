@@ -296,6 +296,8 @@ export function giveHint(task) {
 const PRAISE = ['Perfect cut!', 'That fits beautifully.', 'Nailed it.', 'Runway ready.', 'Exactly right.'];
 const ENCOURAGE = ['Not quite yet. Try once more, or tap Hint.', 'Not yet. A hint can help, then try again.'];
 // Spanish, same order. Written so they never depend on the student's gender.
+const REVEALED = 'You got there with the last hint. Next time, try it before the last hint to count it as right.';
+const REVEALED_ES = 'Llegaste con la última pista. La próxima vez, inténtalo antes de la última pista para que cuente como correcta.';
 const PRAISE_ES = ['¡Corte perfecto!', 'Queda precioso.', '¡Lo lograste!', '¡Listo para la pasarela!', '¡Exacto!'];
 const ENCOURAGE_ES = ['Todavía no. Inténtalo otra vez, o toca Pista.', 'Todavía no. Una pista puede ayudar; luego inténtalo de nuevo.'];
 
@@ -337,6 +339,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   const today = touchDay(student, now, tz); // before mastery changes, so the day's snapshot is a true "before"
   const effective = Math.min(3, task.hintLevel + (task.attempts - 1));
   const aided = effective > 0;
+  const revealed = correct && task.hintLevel >= 3; // the last hint states the answer, so typing it in is not counted as getting it right
   const openBefore = new Set(SKILL_IDS.filter((k) => isUnlocked(k, student.mastery))); // to announce only skills this answer opened
   const before = student.mastery[task.skill];
   student.mastery[task.skill] = updateMastery(before, correct, effective, task.level);
@@ -354,7 +357,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   const praise = correct ? Math.floor(rng() * PRAISE.length) : 0;
   student.thread += thread;
   c.done += 1;
-  if (correct) c.correct += 1;
+  if (correct && !revealed) c.correct += 1;
 
   const result = {
     correct,
@@ -363,7 +366,8 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
     mastery: student.mastery[task.skill],
     skill: task.skill,
     review: Boolean(task.review),
-    feedback: correct ? PRAISE[praise] : why || 'Good effort. Here is how it works.',
+    revealed,
+    feedback: revealed ? REVEALED : correct ? PRAISE[praise] : why || 'Good effort. Here is how it works.',
     explanation: correct ? null : task.hints[2],
     steps: correct ? null : task.hints,
     revealedAnswer: correct ? null : task.answerText,
@@ -373,7 +377,7 @@ export function applyAnswer(student, task, raw, rng, { now = Date.now(), tz = 0 
   };
   if (task.es) {
     result.es = {
-      feedback: correct ? PRAISE_ES[praise] : (why && diagnoseEs(task, raw)) || 'Buen esfuerzo. Así se resuelve.',
+      feedback: revealed ? REVEALED_ES : correct ? PRAISE_ES[praise] : (why && diagnoseEs(task, raw)) || 'Buen esfuerzo. Así se resuelve.',
       explanation: correct ? null : task.es.hints[2],
       steps: correct ? null : task.es.hints,
     };
