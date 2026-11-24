@@ -692,7 +692,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
     // ----- sales targeting (owner only): districts, schools and pitches for /admin/prospects/ -----
     //   GET  /api/admin/prospects/states      every state, with what data has been built
     //   GET  /api/admin/prospects/state/GA    one state's districts and schools
-    //   POST /api/admin/prospects/pitch       { state, district, school?, price, sender, recipient } -> email and proposal
+    //   POST /api/admin/prospects/pitch       { state, district, school?, price, sender, recipient, steps } -> email and proposal
     if (path.startsWith('/api/admin/prospects/')) {
       if (limited('admin:' + clientIp(req), 30)) throw new HttpError(429, 'too many attempts, wait a minute');
       requireOwner(await requireTeacher(req));
@@ -715,7 +715,7 @@ export function createApp({ store = makeStore(), env = process.env, seed, fetchI
           if (!school) throw new HttpError(404, 'unknown school');
         }
         const sender = body.sender && typeof body.sender === 'object' ? body.sender : {};
-        return send(res, 200, buildPitch({ st, district, school, price: body.price, sender, recipient: body.recipient }));
+        return send(res, 200, buildPitch({ st, district, school, price: body.price, sender, recipient: body.recipient, steps: body.steps }));
       }
       throw new HttpError(404, 'not found');
     }

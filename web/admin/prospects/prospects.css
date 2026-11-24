@@ -22,3 +22,4 @@ tr.school td:first-child { padding-left: 28px; font-weight: 600; }
 .pitchout .proposal { min-height: 420px; }
 .copyrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .warnbox { background: #fff6e0; border: 2px solid #f3dd9b; border-radius: 14px; padding: 10px 14px; }
+table.proj { min-width: 360px; max-width: 560px; }

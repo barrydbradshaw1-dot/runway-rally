@@ -153,3 +153,40 @@ test('pitches change with how a state wrote its standards', async () => {
   const odd = buildPitch({ st: as('OH'), district, sender: { name: 'Bar\u0000ry\nX' } });
   assert.doesNotMatch(odd.email, /\u0000/);
 });
+
+test('improvement steps: parsed, capped, and shown as illustrative in the proposal', async () => {
+  const { parseSteps, projections } = await import('../src/prospects.js');
+  assert.deepEqual(parseSteps(''), [5, 10, 15]);
+  assert.deepEqual(parseSteps('15, 5 +10'), [5, 10, 15]);
+  assert.deepEqual(parseSteps('3, 99, -2, x, 7.25'), [3, 7.5]);
+  assert.deepEqual(parseSteps([20]), [20]);
+  const pr = projections({ math: 92, tested: 1000, statePct: 40, steps: [5, 10] });
+  assert.deepEqual(pr.rows.map((r) => r.pct), [97, 100]);
+  assert.equal(pr.rows[0].moreStudents, 50);
+  assert.equal(pr.rows[1].moreStudents, 80);
+  assert.equal(pr.toState, null);
+  assert.equal(projections({ math: null }), null);
+
+  const p = createProspects({ dataDir: DATA });
+  const de = await p.state('DE');
+  const district = de.districts.find((d) => d.id === '1000001');
+  const out = buildPitch({ st: de, district, steps: '5, 20' });
+  assert.match(out.proposal, /What improvement could look like \(illustrative\)/);
+  assert.match(out.proposal, /not promised or predicted results/);
+  assert.match(out.proposal, /2020-21, EDFacts\), 300 students tested/);
+  assert.match(out.proposal, /\+5 points\s+26%\s+15/);
+  assert.match(out.proposal, /\+20 points\s+41%\s+60/);
+  assert.match(out.proposal, /State average \(\+12\)\s+33%\s+36/);
+  // no score, no table
+  const gamma = { ...de.districts.find((d) => d.id === '1000002'), math: null };
+  assert.doesNotMatch(buildPitch({ st: de, district: gamma }).proposal, /illustrative/);
+});
+
+test('names sent in capitals are tidied', async () => {
+  const { tidyName } = await import('../src/prospects.js');
+  assert.equal(tidyName('A P SOLIS MIDDLE'), 'A P Solis Middle');
+  assert.equal(tidyName('DONNA ISD'), 'Donna ISD');
+  assert.equal(tidyName("O'DONNELL STEM ACADEMY"), "O'donnell STEM Academy");
+  assert.equal(tidyName('Atlanta Public Schools'), 'Atlanta Public Schools');
+  assert.equal(tidyName(null), null);
+});

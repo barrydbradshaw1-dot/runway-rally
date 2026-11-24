@@ -83,6 +83,14 @@ const gradeLabel = (g) => (g === null || g === undefined ? '?' : g === -1 ? 'PK'
 export const gradeSpan = (lo, hi) => (lo === null && hi === null ? '' : `${gradeLabel(lo)}-${gradeLabel(hi)}`);
 export const servesMiddleGrades = (lo, hi) => lo !== null && hi !== null && lo <= 8 && Math.min(hi, 12) >= 6;
 
+// Some states send names in capitals ("A P SOLIS MIDDLE"); show them as "A P Solis Middle", keeping
+// school abbreviations like ISD or STEM in capitals.
+const KEEP_UPPER = new Set(['ISD', 'CISD', 'MSD', 'USD', 'CUSD', 'CSD', 'ESD', 'UFSD', 'SD', 'RSD', 'SAU', 'ES', 'MS', 'HS', 'JHS', 'MHS', 'EL', 'STEM', 'STEAM', 'PK', 'II', 'III', 'IV', 'KIPP', 'IDEA', 'YES', 'NYC', 'PS', 'IS', 'JHS', 'DC', 'K-8', 'K-12', 'ROTC', 'AP', 'IB']);
+export function tidyName(name) {
+  if (!name || /[a-z]/.test(name)) return name;
+  return name.replace(/[A-Z0-9][A-Z0-9'.&-]*/g, (w) => (KEEP_UPPER.has(w) || w.length === 1 || /\d/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase()));
+}
+
 const rows = (cols, list) => list.map((r) => Object.fromEntries(cols.map((c, i) => [c, r[i] ?? null])));
 
 // 1 = lowest math result in the state; null when there is no result.
@@ -126,9 +134,11 @@ export function createProspects({ dataDir = DEFAULT_DATA_DIR } = {}) {
     } catch {
       return { ...meta, available: false, districts: [], schools: [] };
     }
-    const districts = rows(raw.districtColumns, raw.districts).map((d) => ({ ...d, agency: AGENCY_TYPES[d.agencyType] || null, mathRank: null, mathPercentile: null }));
+    const districts = rows(raw.districtColumns, raw.districts).map((d) => ({ ...d, name: tidyName(d.name), city: tidyName(d.city), agency: AGENCY_TYPES[d.agencyType] || null, mathRank: null, mathPercentile: null }));
     const schools = rows(raw.schoolColumns, raw.schools).map((s) => ({
       ...s,
+      name: tidyName(s.name),
+      city: tidyName(s.city),
       grades: gradeSpan(s.lowGrade, s.highGrade),
       middle: servesMiddleGrades(s.lowGrade, s.highGrade),
       charter: s.charter === 1,
@@ -164,6 +174,29 @@ export function createProspects({ dataDir = DEFAULT_DATA_DIR } = {}) {
   return { states, state };
 }
 
+// ---------------- improvement steps ----------------
+
+// "5, 10, 15" -> [5, 10, 15]. Whole or half points from 0.5 to 50, at most 6, sorted; the default when empty or bad.
+export const DEFAULT_STEPS = [5, 10, 15];
+export function parseSteps(raw) {
+  const text = Array.isArray(raw) ? raw.join(',') : typeof raw === 'string' ? raw : '';
+  const nums = [...new Set(text.split(/[\s,;+]+/).filter(Boolean).map(Number).filter((n) => Number.isFinite(n) && n >= 0.5 && n <= 50).map((n) => Math.round(n * 2) / 2))].sort((a, b) => a - b);
+  return nums.length ? nums.slice(0, 6) : [...DEFAULT_STEPS];
+}
+
+// The current share proficient next to what it would be at each step up, and about how many more
+// students that is (of those tested). Illustrative arithmetic, not a forecast.
+export function projections({ math, tested = null, statePct = null, steps = DEFAULT_STEPS }) {
+  if (math === null || math === undefined) return null;
+  const more = (pts) => (tested ? Math.round((tested * pts) / 100) : null);
+  const rows = steps.map((step) => {
+    const pct = Math.min(100, Math.round((math + step) * 10) / 10);
+    return { label: `+${step} points`, step, pct, moreStudents: more(pct - math) };
+  });
+  const toState = statePct !== null && statePct !== undefined && statePct > math ? Math.round((statePct - math) * 10) / 10 : null;
+  return { current: math, tested, rows, toState: toState ? { step: toState, pct: statePct, moreStudents: more(toState) } : null };
+}
+
 // ---------------- the pitch ----------------
 
 const clean = (v, max = 200) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) : '');
@@ -186,7 +219,7 @@ function list(items) {
 
 // Builds a short email and a longer proposal for one district, or one school in it.
 // input: { st (from state()), district, school?, price?, sender: { name, org, email }, recipient? }
-export function buildPitch({ st, district, school = null, price = '', sender = {}, recipient = '' }) {
+export function buildPitch({ st, district, school = null, price = '', sender = {}, recipient = '', steps = DEFAULT_STEPS }) {
   const cov = coverage();
   const target = school || district;
   const targetName = target.name;
@@ -273,6 +306,20 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
   } else {
     const facts = [district.enrollment ? `${district.enrollment.toLocaleString('en-US')} students` : null, district.middleSchools ? `${district.middleSchools} schools serving grades 6 to 8` : null].filter(Boolean);
     if (facts.length) p.push(`${districtName}: ${facts.join(', ')}.`);
+  }
+  const tested = target.math !== null && target.math !== undefined ? target.mathTested : school ? district.mathTested : null;
+  const proj = projections({ math, tested, statePct, steps: parseSteps(steps) });
+  if (proj) {
+    p.push('');
+    p.push('What improvement could look like (illustrative)');
+    p.push(`These figures are simple arithmetic from today's score, not promised or predicted results. Today: ${proj.current}% of grade 6 to 8 students in ${mathOf} proficient in math (${st.name} state tests, ${year}, EDFacts)${proj.tested ? `, ${proj.tested.toLocaleString('en-US')} students tested` : ''}.`);
+    const lines = [['', 'Proficient', proj.tested ? 'About this many more students' : null]];
+    lines.push(['Today', `${proj.current}%`, proj.tested ? '' : null]);
+    for (const r of proj.rows) lines.push([r.label, `${r.pct}%`, r.moreStudents !== null ? r.moreStudents.toLocaleString('en-US') : null]);
+    if (proj.toState) lines.push([`State average (+${proj.toState.step})`, `${proj.toState.pct}%`, proj.toState.moreStudents !== null ? proj.toState.moreStudents.toLocaleString('en-US') : null]);
+    const w0 = Math.max(...lines.map((l) => l[0].length));
+    const w1 = Math.max(...lines.map((l) => l[1].length));
+    for (const l of lines) p.push([l[0].padEnd(w0), l[1].padEnd(w1), l[2] ?? ''].join('   ').trimEnd());
   }
   p.push('');
   p.push(`How it fits ${theStandards(st)}`);

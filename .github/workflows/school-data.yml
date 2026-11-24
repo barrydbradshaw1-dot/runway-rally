@@ -10,10 +10,6 @@ on:
         description: 'State codes to refresh, like "GA FL". Leave empty for all 50 states and DC.'
         required: false
         default: ''
-  # TEMPORARY: builds the data on this branch before merge; removed before review
-  push:
-    branches: [sales-targets]
-    paths: [api/tools/build-school-data.mjs, .github/workflows/school-data.yml]
 
 permissions:
   contents: write
@@ -34,7 +30,6 @@ jobs:
       - name: Build the data
         env:
           STATES: ${{ inputs.states }}
-          VERBOSE: '1'
         run: node api/tools/build-school-data.mjs
       - name: Commit the data
         run: |

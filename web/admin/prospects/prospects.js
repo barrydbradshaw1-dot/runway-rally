@@ -186,6 +186,11 @@ function pitchPanel() {
   const org = field('org', 'Organization', '', 'Example: your business name');
   const email = field('email', 'Your email', '', 'Where they can reach you');
   const price = field('price', 'Price line (leave empty to leave pricing out)', 'free for teachers and students, with a school license of about $1,500 a year');
+  const steps = field('steps', 'Improvement steps, in points', '5, 10, 15', 'Example: 5, 10, 15');
+  const projSlot = h('div');
+  const drawProjection = () => projSlot.replaceChildren(projectionTable(t, steps.input.value) || '');
+  steps.input.addEventListener('input', drawProjection);
+  drawProjection();
   const out = h('div', { class: 'pitchout' });
   const err = h('p', { class: 'error', role: 'alert' });
   const copy = (ta, label) => h('button', { class: 'small', type: 'button', text: `Copy ${label}`, onclick: async (e) => {
@@ -199,7 +204,7 @@ function pitchPanel() {
   const write = async () => {
     err.textContent = '';
     try {
-      const r = await api('/api/admin/prospects/pitch', { method: 'POST', body: { state: state.st.code, district: t.district.id, school: t.school?.id, recipient: recipient.value, price: price.input.value, sender: { name: name.input.value, org: org.input.value, email: email.input.value } } });
+      const r = await api('/api/admin/prospects/pitch', { method: 'POST', body: { state: state.st.code, district: t.district.id, school: t.school?.id, recipient: recipient.value, price: price.input.value, steps: steps.input.value, sender: { name: name.input.value, org: org.input.value, email: email.input.value } } });
       const subj = h('input', { type: 'text', readonly: true, value: r.subject });
       const em = h('textarea', { class: 'email', readonly: true, value: r.email });
       const pr = h('textarea', { class: 'proposal', readonly: true, value: r.proposal });
@@ -215,13 +220,43 @@ function pitchPanel() {
   const who = t.school ? `${t.school.name}, ${t.district.name}` : t.district.name;
   const panel = h('section', { class: 'panel', id: 'pitch', 'aria-labelledby': 'p-h' },
     h('div', { class: 'head' }, h('h2', { id: 'p-h', text: `Pitch for ${who}` }), h('button', { class: 'ghost small', text: 'Close', onclick: () => { state.target = null; render(); } })),
-    h('div', { class: 'pitchform' }, h('label', {}, 'Who it is for', recipient), name.el, org.el, email.el, price.el),
+    h('div', { class: 'pitchform' }, h('label', {}, 'Who it is for', recipient), name.el, org.el, email.el, price.el, steps.el),
+    projSlot,
     h('div', { class: 'copyrow' }, h('button', { class: 'primary', text: 'Write the pitch', onclick: write })),
     h('p', { class: 'warnbox', text: `Before you send it: check the standards name and any privacy law on ${state.st.name}'s education department site, read it through, and confirm the price. Nothing is sent from this page.` }),
     err,
     out,
   );
   return panel;
+}
+
+// Same arithmetic as the server's projections(): today's share proficient, plus each step, capped at 100.
+function parseSteps(raw) {
+  const nums = [...new Set(String(raw).split(/[\s,;+]+/).filter(Boolean).map(Number).filter((n) => Number.isFinite(n) && n >= 0.5 && n <= 50).map((n) => Math.round(n * 2) / 2))].sort((a, b) => a - b);
+  return nums.length ? nums.slice(0, 6) : [5, 10, 15];
+}
+
+function projectionTable(t, rawSteps) {
+  const st = state.st;
+  const own = t.school ? t.school.math !== null : true;
+  const src = own ? t.school || t.district : t.district;
+  if (src.math === null || src.math === undefined) return h('p', { class: 'muted', text: 'No math score was reported for this one, so there is no improvement table.' });
+  const tested = src.mathTested;
+  const more = (pts) => (tested ? Math.round((tested * pts) / 100).toLocaleString('en-US') : '');
+  const r1 = (x) => Math.round(x * 10) / 10;
+  const rows = [h('tr', {}, h('td', { text: 'Today' }), h('td', { class: mathClass(src.math), text: `${src.math}%` }), h('td', { class: 'num', text: '' }))];
+  for (const step of parseSteps(rawSteps)) {
+    const p = Math.min(100, r1(src.math + step));
+    rows.push(h('tr', {}, h('td', { text: `+${step} points` }), h('td', { class: mathClass(p), text: `${p}%` }), h('td', { class: 'num', text: more(p - src.math) })));
+  }
+  const sAvg = st.stateMath?.pct;
+  if (sAvg !== undefined && sAvg !== null && sAvg > src.math) rows.push(h('tr', {}, h('td', { text: `State average (+${r1(sAvg - src.math)})` }), h('td', { class: mathClass(sAvg), text: `${sAvg}%` }), h('td', { class: 'num', text: more(sAvg - src.math) })));
+  return h('div', { class: 'stack' },
+    h('h3', { text: 'What improvement could look like' }),
+    h('p', { class: 'warnbox', text: `Illustrative only, not a promised or predicted result. Today's figure: grade 6 to 8 math, ${st.name} state tests, ${st.assessmentSchoolYear} (federal EDFacts data)${own ? '' : `, for ${t.district.name} because the school's own figure was not reported`}${tested ? `, ${tested.toLocaleString('en-US')} students tested` : ''}. The pitch's proposal includes this table.` }),
+    h('div', { class: 'tablewrap' }, h('table', { class: 'plain proj' },
+      h('thead', {}, h('tr', {}, h('th', { text: '' }), h('th', { text: 'Proficient' }), h('th', { text: tested ? 'About this many more students' : '' }))),
+      h('tbody', {}, rows))));
 }
 
 function choose(district, school = null) {
