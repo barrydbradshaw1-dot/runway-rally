@@ -501,6 +501,33 @@ test('a nickname already in the class is refused, so a student cannot quietly st
   }
 });
 
+test('a teacher can set Spanish first for one student, so it shows with no tap', async () => {
+  const { server, call } = await boot();
+  try {
+    const s = await call('/api/session', { method: 'POST', body: { classCode: 'ROOM1', nickname: 'Luna Star' } });
+    assert.equal(s.json.student.spanishFirst, false);
+    const admin = { 'x-admin-token': 'dev-admin' };
+    const roster = await call('/api/admin/class/ROOM1', { headers: admin });
+    const row = roster.json.students.find((x) => x.nickname === 'Luna Star');
+    assert.equal(row.spanishFirst, false);
+    const path = `/api/admin/class/ROOM1/student/${row.id}`;
+    assert.equal((await call(path, { method: 'PATCH', body: { spanishFirst: true } })).status, 403);
+    assert.equal((await call(`/api/admin/class/HOME/student/${row.id}`, { method: 'PATCH', headers: admin, body: { spanishFirst: true } })).status, 404);
+    assert.equal((await call(path, { method: 'PATCH', headers: admin, body: { spanishFirst: 'yes' } })).status, 400);
+    assert.equal((await call(path, { method: 'PATCH', headers: admin, body: {} })).status, 400);
+    const r = await call(path, { method: 'PATCH', headers: admin, body: { spanishFirst: true } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json, { nickname: 'Luna Star', spanishFirst: true });
+    assert.equal((await call('/api/state', { token: s.json.token })).json.student.spanishFirst, true);
+    assert.equal((await call('/api/admin/class/ROOM1', { headers: admin })).json.students.find((x) => x.id === row.id).spanishFirst, true);
+    // renaming still works and leaves the setting alone
+    const renamed = await call(path, { method: 'PATCH', headers: admin, body: { nickname: 'Moon Star' } });
+    assert.deepEqual(renamed.json, { nickname: 'Moon Star', spanishFirst: true });
+  } finally {
+    server.close();
+  }
+});
+
 test('a teacher can give a student a new sign-in code; the old one stops working', async () => {
   const { server, call } = await boot();
   try {

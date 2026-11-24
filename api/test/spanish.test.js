@@ -169,3 +169,12 @@ test('the Spanish help is off by default and a teacher can turn it on for a clas
     server.close();
   }
 });
+
+test("the teacher's Spanish first setting turns Spanish on with no tap, and a tap on the device still wins", async () => {
+  const { readFile } = await import('node:fs/promises');
+  const app = await readFile(new URL('../../web/app.js', import.meta.url), 'utf8');
+  assert.match(app, /return v === '1' \|\| \(v !== '0' && state\.student\?\.spanishFirst === true\);/);
+  const admin = await readFile(new URL('../../web/admin/admin.js', import.meta.url), 'utf8');
+  assert.match(admin, /s\.id && state\.data\.spanish\s*\?\s*h\('button'/, 'the button shows only when the class has Spanish help on');
+  assert.match(admin, /body: \{ spanishFirst: !s\.spanishFirst \}/);
+});

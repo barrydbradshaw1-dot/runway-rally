@@ -177,6 +177,32 @@ test('the first problem at a new skill and level comes with a worked example, on
   if (`${second.skill}:${second.level}` === key) assert.equal(second.example, null);
 });
 
+test('a task never repeats the worked example just shown or the question just asked', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const rng = mulberry32(seed);
+    const s = fresh();
+    startCommission(s, { rng, now: T0 });
+    let last = null;
+    for (let i = 0; i < 5; i++) {
+      const t = nextTask(s, rng, { now: T0 });
+      if (t.example) assert.notEqual(t.prompt, t.example.prompt, `seed ${seed}: task copies its example`);
+      assert.notEqual(t.prompt, last, `seed ${seed}: the same question twice in a row`);
+      last = t.prompt;
+      applyAnswer(s, t, t.answerText, rng, { now: T0 });
+    }
+  }
+});
+
+test('one degree is singular', () => {
+  for (let seed = 1; seed <= 400; seed++) {
+    for (const theme of ['fabric', 'runway']) {
+      const t = makeTask('int_add', 2, theme, mulberry32(seed), { es: true });
+      assert.ok(!/\b1 degrees\b/.test(t.prompt), t.prompt);
+      assert.ok(!/\b1 grados\b/.test(t.es?.prompt || ''), t.es?.prompt);
+    }
+  }
+});
+
 // ---------- rewards and session end ----------
 
 test('a new piece is earned with 3 of 5 right and goes on at once; fewer earns effort thread and a hint', () => {

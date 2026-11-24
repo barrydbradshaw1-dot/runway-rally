@@ -98,6 +98,7 @@ export function normalizeStudent(s) {
   s.faded ??= {};
   s.examplesSeen ??= [];
   s.placement ??= null;
+  s.spanishFirst ??= false; // the teacher can set Spanish to show first, for an English learner
   s.daily ??= {};
   s.snapshots ??= {};
   s.streak ??= { count: 0, lastDay: null };
@@ -127,6 +128,7 @@ export function publicStudent(s) {
     favorites: topInterests(s.interest),
     placement: s.placement ? { status: s.placement.status, asked: s.placement.asked } : null,
     reviewsDue: dueReviews(s).length,
+    spanishFirst: s.spanishFirst === true,
     commission: s.commission && {
       id: s.commission.id,
       skill: s.commission.skill,
@@ -242,13 +244,18 @@ export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
   }
   let level = chooseLevel(student, skill);
   if ((student.wrongStreak[skill] || 0) >= 3) level = 1; // no prerequisite to fall back on
-  const t = makeTask(skill, level, c.theme, rng, { es });
+  let t = makeTask(skill, level, c.theme, rng, { es });
   const key = `${skill}:${t.level}`;
   let example = null;
   if (!student.examplesSeen.includes(key)) {
     example = makeExample(skill, t.level, c.theme, rng, { es });
     student.examplesSeen.push(key);
   }
+  // Never ask the question she just did, or the one just solved for her in the example.
+  for (let i = 0; i < 10 && (t.prompt === c.lastPrompt || t.prompt === example?.prompt); i++) {
+    t = makeTask(skill, level, c.theme, rng, { es });
+  }
+  c.lastPrompt = t.prompt;
   const task = {
     id: randomUUID(),
     studentId: student.id,
@@ -538,6 +545,7 @@ export function classSummary(students) {
       streak: s.streak.count,
       topAreas: topInterests(s.interest, 3),
       needsHelpWith: needsHelp(s),
+      spanishFirst: s.spanishFirst === true,
     };
   });
 }
