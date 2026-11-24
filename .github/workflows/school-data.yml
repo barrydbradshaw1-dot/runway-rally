@@ -1,0 +1,46 @@
+# Refreshes the district and school lists behind the owner's sales targeting page (/admin/prospects/).
+# Run it from the Actions tab ("School data", then "Run workflow"), about once a year when NCES
+# publishes a new school year. It commits the new files to the branch it runs on.
+name: School data
+
+on:
+  workflow_dispatch:
+    inputs:
+      states:
+        description: 'State codes to refresh, like "GA FL". Leave empty for all 50 states and DC.'
+        required: false
+        default: ''
+  # TEMPORARY: builds the data on this branch before merge; removed before review
+  push:
+    branches: [sales-targets]
+    paths: [api/tools/build-school-data.mjs, .github/workflows/school-data.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: school-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the data
+        env:
+          STATES: ${{ inputs.states || 'GA DE' }}
+        run: node api/tools/build-school-data.mjs
+      - name: Commit the data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/data/schools
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "Update school and district data"
+          git pull --rebase
+          git push
