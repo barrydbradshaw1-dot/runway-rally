@@ -27,12 +27,16 @@ const MIDDLE_GRADES = [6, 7, 8];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// GET one URL as JSON. Returns null for 404 (a year or grade the API does not have).
+// GET one URL as JSON. Returns null for 404 or 403: the API answers a year or grade it does not
+// have with one of those.
 async function getJson(url) {
   for (let attempt = 1; ; attempt++) {
     try {
-      const res = await fetch(url, { headers: { accept: 'application/json' } });
-      if (res.status === 404) return null;
+      const res = await fetch(url, { headers: { accept: 'application/json', 'user-agent': 'runway-rally-school-data/1.0' } });
+      if (res.status === 404 || res.status === 403) {
+        if (process.env.VERBOSE) console.log(`  ${res.status} ${url}`);
+        return null;
+      }
       if (res.ok) return await res.json();
       if (attempt >= 5 || (res.status < 500 && res.status !== 429)) throw new Error(`HTTP ${res.status} for ${url}`);
     } catch (err) {
