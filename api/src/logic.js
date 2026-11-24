@@ -242,13 +242,18 @@ export function nextTask(student, rng, { now = Date.now(), es = false } = {}) {
   }
   let level = chooseLevel(student, skill);
   if ((student.wrongStreak[skill] || 0) >= 3) level = 1; // no prerequisite to fall back on
-  const t = makeTask(skill, level, c.theme, rng, { es });
+  let t = makeTask(skill, level, c.theme, rng, { es });
   const key = `${skill}:${t.level}`;
   let example = null;
   if (!student.examplesSeen.includes(key)) {
     example = makeExample(skill, t.level, c.theme, rng, { es });
     student.examplesSeen.push(key);
   }
+  // Never ask the question she just did, or the one just solved for her in the example.
+  for (let i = 0; i < 10 && (t.prompt === c.lastPrompt || t.prompt === example?.prompt); i++) {
+    t = makeTask(skill, level, c.theme, rng, { es });
+  }
+  c.lastPrompt = t.prompt;
   const task = {
     id: randomUUID(),
     studentId: student.id,

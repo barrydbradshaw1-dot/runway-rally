@@ -536,8 +536,8 @@ function intAdd(level, theme, rng) {
     return {
       prompt: say(theme, {
         jewelry: `Your balance is ${a} dollars because you owe for supplies. You sell a ring for $${b}. What is your balance now?`,
-        fabric: `The dye room is ${a}°C. It warms up ${b} degrees. What is the temperature now?`,
-        runway: `At dawn it is ${a}°F on the mountain runway. It warms up ${b} degrees. What is the temperature now?`,
+        fabric: `The dye room is ${a}°C. It warms up ${b} degree${b === 1 ? '' : 's'}. What is the temperature now?`,
+        runway: `At dawn it is ${a}°F on the mountain runway. It warms up ${b} degree${b === 1 ? '' : 's'}. What is the temperature now?`,
       }),
       ...intAns(ans),
       hints: [`Start at ${a} and move ${b} to the right.`, `It takes ${-a} steps to get back to 0.${b > -a ? ` Then go ${b + a} more.` : ''}`, `${a} + ${b} = ${ans}.`],
