@@ -75,7 +75,7 @@ function multFacts(level, theme, rng) {
       `Son ${a} grupos iguales de ${b}, así que multiplica: ${a} × ${b}.`,
       level === 3
         ? `Separa ${a} en partes: ${tens} × ${b} = ${tens * b} y ${a - tens} × ${b} = ${(a - tens) * b}.`
-        : `Cuenta sumando ${b} cada vez, ${a} veces: ${Array.from({ length: Math.min(a, 4) }, (_, i) => b * (i + 1)).join(', ')}, y así sucesivamente.`,
+        : `Cuenta sumando ${b} cada vez, ${a} veces: ${Array.from({ length: Math.min(a - 1, 4) }, (_, i) => b * (i + 1)).join(', ')}, y así sucesivamente.`,
       `${a} × ${b} = ${p}.`,
     ],
     mistakes: [{ value: a + b, text: `Sumaste. Hay ${a} grupos con ${b} en cada uno, así que multiplica.` }],

@@ -157,3 +157,44 @@ test('a newly opened skill is announced once, on the answer that opened it', () 
   assert.ok(seen.length > 0, 'a fresh student opens at least one skill in a perfect commission');
   assert.equal(new Set(seen).size, seen.length, 'no skill is announced twice');
 });
+
+test('an answer typed in after the last hint (which states it) does not count as right', () => {
+  const rng = mulberry32(21);
+  const s = newStudent({ id: 'u10', classCode: 'ABC', nickname: 'Test' });
+  startCommission(s, { rng });
+  let last;
+  for (let n = 0; n < COMMISSION_LENGTH; n++) {
+    const t = nextTask(s, rng);
+    if (!t) break;
+    giveHint(t); giveHint(t); giveHint(t);
+    last = applyAnswer(s, t, t.answerText, rng);
+    assert.equal(last.correct, true);
+    assert.equal(last.revealed, true);
+    assert.match(last.feedback, /last hint/);
+  }
+  assert.ok(last.commissionComplete);
+  assert.equal(last.score.correct, 0, 'none counted as right');
+  assert.equal(last.bonusThread, 0, 'no great-work bonus');
+});
+
+test('an answer found with one or two hints still counts as right', () => {
+  const rng = mulberry32(22);
+  const s = newStudent({ id: 'u11', classCode: 'ABC', nickname: 'Test' });
+  startCommission(s, { rng });
+  const t = nextTask(s, rng);
+  giveHint(t); giveHint(t);
+  const r = applyAnswer(s, t, t.answerText, rng);
+  assert.equal(r.correct, true);
+  assert.equal(r.revealed, false);
+  assert.doesNotMatch(r.feedback, /last hint/);
+});
+
+test('the count-up hint for multiplying never lists the answer itself', () => {
+  for (let seed = 1; seed < 400; seed++) {
+    const t = makeTask('mult_facts', 1, 'jewelry', mulberry32(seed));
+    const m = /Count up by (\d+)s, (\d+) times: ([\d, ]+), and so on\./.exec(t.hints[1]);
+    if (!m) continue;
+    const listed = m[3].split(',').map((x) => Number(x.trim()));
+    assert.ok(!listed.includes(Number(m[1]) * Number(m[2])), t.hints[1]);
+  }
+});

@@ -209,6 +209,9 @@ async function api(path, { method = 'GET', body } = {}) {
 
 function signOut() {
   store.del('rr_token');
+  // on a shared device the next student starts fresh: English view, sound on
+  store.del('rr_es');
+  store.del(SOUND_KEY);
   const viaLti = state.student?.viaLti;
   Object.assign(state, { token: null, student: null, task: null, hint: null, input: '' });
   if (viaLti) return show(h('div', { class: 'card stack' }, h('h2', { text: 'Session ended' }), h('p', { text: 'Open Runway Rally again from your course in Brightspace.' })));
@@ -755,7 +758,7 @@ function taskScreen() {
     hintBox,
     msg,
     pad,
-    h('div', { class: 'row' }, hintBtn, check),
+    h('div', { class: 'row answer-actions' }, hintBtn, check),
   ];
   show(...nodes);
   check.style.flex = '1';
@@ -818,7 +821,7 @@ function placementScreen() {
     display,
     msg,
     pad,
-    h('div', { class: 'row' }, notSure, done),
+    h('div', { class: 'row answer-actions' }, notSure, done),
   );
   state.keyHandler = (e) => {
     if (e.target instanceof HTMLButtonElement && e.key === 'Enter') return;

@@ -140,7 +140,7 @@ function multFacts(level, theme, rng) {
       `This is ${a} equal groups of ${b}, so multiply: ${a} × ${b}.`,
       level === 3
         ? `Break ${a} apart: ${tens} × ${b} = ${tens * b} and ${a - tens} × ${b} = ${(a - tens) * b}.`
-        : `Count up by ${b}s, ${a} times: ${Array.from({ length: Math.min(a, 4) }, (_, i) => b * (i + 1)).join(', ')}, and so on.`,
+        : `Count up by ${b}s, ${a} times: ${Array.from({ length: Math.min(a - 1, 4) }, (_, i) => b * (i + 1)).join(', ')}, and so on.`,
       `${a} × ${b} = ${p}.`,
     ],
     mistakes: [{ value: a + b, text: `You added. There are ${a} groups with ${b} in each, so multiply.` }],

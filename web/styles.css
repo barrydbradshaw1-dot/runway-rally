@@ -145,6 +145,9 @@ label { display: grid; gap: 6px; font-weight: 600; }
 }
 .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .pad button { min-height: 60px; font-size: 1.4rem; }
+/* Check and Hint stay in view on short phone screens */
+.answer-actions { position: sticky; bottom: 0; z-index: 2; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg2) 30%); }
+@media (max-height: 760px) { .pad { gap: 8px; } .pad button { min-height: 48px; } }
 .pad .wide { grid-column: span 2; }
 
 .hint-box { background: #fff8e4; border-left: 5px solid var(--gold); border-radius: 12px; padding: 12px 14px; }
