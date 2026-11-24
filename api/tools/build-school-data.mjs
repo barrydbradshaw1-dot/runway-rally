@@ -108,8 +108,12 @@ async function firstYearWithRows(years, pathFor) {
 // Years the API does not have (it answers them with an error); learned on the first state, skipped after.
 const missingYears = new Set();
 
+// The newest year with results, plus the next older one (so a pandemic-era year can be read next to
+// a pre-pandemic one).
 async function middleGradeMath(level, idField, fips) {
+  const found = [];
   for (const y of ASSESSMENT_YEARS) {
+    if (found.length === 2) break;
     if (missingYears.has(`${level}:${y}`)) continue;
     const byGrade = [];
     try {
@@ -120,9 +124,10 @@ async function middleGradeMath(level, idField, fips) {
       continue;
     }
     const math = mathByGrade(byGrade, idField);
-    if (math.size) return { year: y, math };
+    if (math.size) found.push({ year: y, math });
   }
-  return { year: null, math: new Map() };
+  const none = { year: null, math: new Map() };
+  return { latest: found[0] || none, previous: found[1] || none };
 }
 
 async function buildState(st) {
@@ -130,8 +135,10 @@ async function buildState(st) {
   const dir = await firstYearWithRows(DIRECTORY_YEARS, (y) => `schools/ccd/directory/${y}/?fips=${f}`);
   if (!dir.year) throw new Error(`no school directory data for ${st.code}`);
   const districtRows = await getAll(`school-districts/ccd/directory/${dir.year}/?fips=${f}`);
-  const dMath = await middleGradeMath('school-districts', 'leaid', f);
-  const sMath = await middleGradeMath('schools', 'ncessch', f);
+  const dAll = await middleGradeMath('school-districts', 'leaid', f);
+  const sAll = await middleGradeMath('schools', 'ncessch', f);
+  const dMath = dAll.latest;
+  const sMath = sAll.latest;
 
   const schools = [];
   for (const r of dir.rows) {
@@ -144,6 +151,7 @@ async function buildState(st) {
     const enrollment = num(r.enrollment);
     const frl = num(r.free_or_reduced_price_lunch);
     const m = sMath.math.get(id);
+    const mp = sAll.previous.math.get(id);
     schools.push([
       id,
       r.leaid ? String(r.leaid) : null,
@@ -158,6 +166,7 @@ async function buildState(st) {
       m ? m.pct : null,
       m ? m.n : null,
       text(r.phone),
+      mp ? mp.pct : null,
     ]);
   }
 
@@ -178,7 +187,8 @@ async function buildState(st) {
     if (!counts) continue; // only districts with at least one open school
     seen.add(id);
     const m = dMath.math.get(id);
-    districts.push([id, name, text(r.city_location), num(r.agency_type), text(r.phone), num(r.enrollment), counts.all, counts.mid, m ? m.pct : null, m ? m.n : null]);
+    const mp = dAll.previous.math.get(id);
+    districts.push([id, name, text(r.city_location), num(r.agency_type), text(r.phone), num(r.enrollment), counts.all, counts.mid, m ? m.pct : null, m ? m.n : null, mp ? mp.pct : null]);
   }
   // schools whose district is missing from the district directory still get a row
   for (const s of schools) {
@@ -186,17 +196,21 @@ async function buildState(st) {
       seen.add(s[1]);
       const counts = bySchoolDistrict.get(s[1]);
       const m = dMath.math.get(s[1]);
-      districts.push([s[1], `District ${s[1]}`, null, null, null, null, counts.all, counts.mid, m ? m.pct : null, m ? m.n : null]);
+      const mp = dAll.previous.math.get(s[1]);
+      districts.push([s[1], `District ${s[1]}`, null, null, null, null, counts.all, counts.mid, m ? m.pct : null, m ? m.n : null, mp ? mp.pct : null]);
     }
   }
 
   // state average across districts, weighted by students tested
-  let n = 0;
-  let sum = 0;
-  for (const m of dMath.math.values()) {
-    n += m.n;
-    sum += m.pct * m.n;
-  }
+  const average = (math) => {
+    let n = 0;
+    let sum = 0;
+    for (const m of math.values()) {
+      n += m.n;
+      sum += m.pct * m.n;
+    }
+    return n ? { pct: round1(sum / n), n } : null;
+  };
 
   districts.sort((a, b) => a[1].localeCompare(b[1]));
   schools.sort((a, b) => a[2].localeCompare(b[2]));
@@ -206,10 +220,12 @@ async function buildState(st) {
     source: 'NCES Common Core of Data directory and EDFacts state assessments, via the Urban Institute Education Data Portal',
     directoryYear: dir.year,
     assessmentYear: dMath.year ?? sMath.year,
-    stateMath: n ? { pct: round1(sum / n), n } : null,
-    districtColumns: ['id', 'name', 'city', 'agencyType', 'phone', 'enrollment', 'schools', 'middleSchools', 'math', 'mathTested'],
+    stateMath: average(dMath.math),
+    previousAssessmentYear: dAll.previous.year ?? sAll.previous.year,
+    previousStateMath: average(dAll.previous.math),
+    districtColumns: ['id', 'name', 'city', 'agencyType', 'phone', 'enrollment', 'schools', 'middleSchools', 'math', 'mathTested', 'mathPrevious'],
     districts,
-    schoolColumns: ['id', 'district', 'name', 'city', 'lowGrade', 'highGrade', 'enrollment', 'charter', 'titleI', 'lowIncomePct', 'math', 'mathTested', 'phone'],
+    schoolColumns: ['id', 'district', 'name', 'city', 'lowGrade', 'highGrade', 'enrollment', 'charter', 'titleI', 'lowIncomePct', 'math', 'mathTested', 'phone', 'mathPrevious'],
     schools,
   };
 }
@@ -241,9 +257,11 @@ for (const st of list) {
       districts: data.districts.length,
       schools: data.schools.length,
       stateMath: data.stateMath?.pct ?? null,
+      previousAssessmentYear: data.previousAssessmentYear,
+      previousStateMath: data.previousStateMath?.pct ?? null,
     };
     await writeFile(join(OUT, 'index.json'), JSON.stringify(index, null, 1) + '\n');
-    console.log(`${st.code}: ${data.districts.length} districts, ${data.schools.length} schools, directory ${data.directoryYear}, math ${data.assessmentYear ?? 'none'} (${Math.round((Date.now() - t0) / 1000)}s)`);
+    console.log(`${st.code}: ${data.districts.length} districts, ${data.schools.length} schools, directory ${data.directoryYear}, math ${data.assessmentYear ?? 'none'} and ${data.previousAssessmentYear ?? 'none'} (${Math.round((Date.now() - t0) / 1000)}s)`);
   } catch (err) {
     failed.push(st.code);
     console.error(`${st.code}: failed: ${err.message}`);

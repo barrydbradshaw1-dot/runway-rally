@@ -33,7 +33,7 @@ jobs:
           node-version: 22
       - name: Build the data
         env:
-          STATES: ${{ inputs.states || 'GA DE' }}
+          STATES: ${{ inputs.states }}
           VERBOSE: '1'
         run: node api/tools/build-school-data.mjs
       - name: Commit the data

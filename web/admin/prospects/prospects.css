@@ -1,0 +1,23 @@
+.pickrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.pickrow label { display: grid; gap: 4px; }
+.pickrow select, .pickrow input[type='search'], .pitchform input { font: inherit; min-height: 44px; border-radius: 12px; border: 2px solid #d8d0f5; padding: 0 10px; background: #fff; }
+.pickrow select { min-width: 240px; }
+.pickrow input[type='search'] { min-width: 240px; }
+.toggle { display: flex; gap: 8px; align-items: center; min-height: 44px; }
+.toggle input { width: 20px; height: 20px; min-height: 0; }
+.tabs { display: flex; gap: 6px; }
+.tabs button[aria-pressed='true'] { background: #6a4cff; color: #fff; border-color: #6a4cff; }
+.facts { display: grid; gap: 4px; }
+.facts p { margin: 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.math { text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 72px; }
+tr.school td { background: #fff; font-weight: 400; }
+tr.school td:first-child { padding-left: 28px; font-weight: 600; }
+.pitchform { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.pitchform label { display: grid; gap: 4px; }
+.pitchout { display: grid; gap: 10px; }
+.pitchout textarea { font: inherit; width: 100%; border-radius: 12px; border: 2px solid #d8d0f5; padding: 10px; resize: vertical; background: #fcfbff; }
+.pitchout .email { min-height: 260px; }
+.pitchout .proposal { min-height: 420px; }
+.copyrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.warnbox { background: #fff6e0; border: 2px solid #f3dd9b; border-radius: 14px; padding: 10px 14px; }
