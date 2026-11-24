@@ -148,13 +148,16 @@ export function createProspects({ dataDir = DEFAULT_DATA_DIR } = {}) {
       assessmentYear: raw.assessmentYear,
       assessmentSchoolYear: schoolYear(raw.assessmentYear),
       stateMath: raw.stateMath,
+      previousAssessmentYear: raw.previousAssessmentYear ?? null,
+      previousAssessmentSchoolYear: schoolYear(raw.previousAssessmentYear),
+      previousStateMath: raw.previousStateMath ?? null,
       districtsScored,
       schoolsScored,
       districts,
       schools,
     };
     cache.set(code, out);
-    while (cache.size > 6) cache.delete(cache.keys().next().value);
+    while (cache.size > 3) cache.delete(cache.keys().next().value);
     return out;
   }
 
@@ -202,6 +205,13 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
     math !== null && year
       ? `In ${year}, about ${math}% of ${mathOf}'s grade 6 to 8 students scored proficient in math on ${st.name}'s state tests${cmp ? `, ${cmp}` : ''}.`
       : null;
+  // the year before, usually the last one before the pandemic
+  const prevYear = schoolYear(st.previousAssessmentYear);
+  const prev = target.math !== null && target.math !== undefined ? target.mathPrevious : school ? district.mathPrevious : null;
+  const prevSentence =
+    prev !== null && prev !== undefined && prevYear
+      ? `In ${prevYear}, it was ${prev}%${st.previousStateMath?.pct !== undefined && st.previousStateMath?.pct !== null ? ` against the state's ${st.previousStateMath.pct}%` : ''}.`
+      : null;
 
   const topicsShort = ['ratios and percents', 'negative numbers', 'expressions and equations', 'slope and linear functions', 'geometry', 'probability'];
   const standardsSentence =
@@ -243,6 +253,7 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
   p.push(`Why ${targetName}`);
   if (dataSentence) {
     p.push(dataSentence);
+    if (prevSentence) p.push(prevSentence);
     if (school && school.math === null && district.math !== null) p.push(`School-level results were not reported for ${school.name}, so this is the district figure.`);
     if (target.mathRank && (school ? st.schoolsScored : st.districtsScored)) {
       const of = school ? st.schoolsScored : st.districtsScored;
@@ -269,7 +280,7 @@ export function buildPitch({ st, district, school = null, price = '', sender = {
     const names = cov.byGrade[g].map((s) => (georgia && s.georgia.length ? `${s.name} (${s.georgia.join(', ')})` : ccssState && s.ccss.length ? `${s.name} (${s.ccss.join(', ')})` : s.name));
     p.push(`- Grade ${g}: ${names.join('; ')}.`);
   }
-  p.push(`- Catch-up: ${cov.foundations} grade 3 to 5 skills (multiplying, dividing and fractions) for students who are behind.`);
+  p.push(`- Catch-up: ${cov.foundations} grade 3 to 5 skills (multiplying, dividing, fractions and decimals) for students who are behind.`);
   p.push('- Teacher homework: any grade 6 to 8 assignment can become practice by uploading a photo of it.');
   if (st.note) p.push(`Note: ${st.note}`);
   p.push('');

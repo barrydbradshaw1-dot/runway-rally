@@ -1,0 +1,5 @@
+{"state":"DE","builtAt":"2026-11-24","source":"test fixture","directoryYear":2024,"assessmentYear":2020,"stateMath":{"pct":33,"n":450},"previousAssessmentYear":2018,"previousStateMath":{"pct":40,"n":500},
+"districtColumns":["id","name","city","agencyType","phone","enrollment","schools","middleSchools","math","mathTested","mathPrevious"],
+"districts":[["1000001","Capital School District","Dover",1,"302-555-0000",800,2,1,21,300,30],["1000002","Gamma Charter",null,7,null,200,1,1,45,150,null]],
+"schoolColumns":["id","district","name","city","lowGrade","highGrade","enrollment","charter","titleI","lowIncomePct","math","mathTested","phone","mathPrevious"],
+"schools":[["100000100001","1000001","Alpha Middle","Dover",6,8,500,0,1,50,null,null,"302-555-0100",null],["100000100002","1000001","Beta Elementary","Dover",-1,5,300,0,0,null,null,null,null,null],["100000200001","1000002","Gamma Charter","Newark",0,8,200,1,1,null,null,null,null,null]]}

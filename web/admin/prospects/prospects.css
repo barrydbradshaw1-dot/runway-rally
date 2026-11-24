@@ -1,12 +1,13 @@
 .pickrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
 .pickrow label { display: grid; gap: 4px; }
-.pickrow select, .pickrow input[type='search'], .pitchform input { font: inherit; min-height: 44px; border-radius: 12px; border: 2px solid #d8d0f5; padding: 0 10px; background: #fff; }
+.pickrow select, .toolbar input[type='search'], .pitchform input { font: inherit; min-height: 44px; border-radius: 12px; border: 2px solid #d8d0f5; padding: 0 10px; background: #fff; }
 .pickrow select { min-width: 240px; }
-.pickrow input[type='search'] { min-width: 240px; }
+.toolbar input[type='search'] { min-width: 240px; }
 .toggle { display: flex; gap: 8px; align-items: center; min-height: 44px; }
 .toggle input { width: 20px; height: 20px; min-height: 0; }
 .tabs { display: flex; gap: 6px; }
-.tabs button[aria-pressed='true'] { background: #6a4cff; color: #fff; border-color: #6a4cff; }
+.tabs button { min-height: 44px; padding: 8px 14px; }
+.tabs button[aria-pressed='true'] { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; }
 .facts { display: grid; gap: 4px; }
 .facts p { margin: 0; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

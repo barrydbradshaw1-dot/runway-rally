@@ -231,7 +231,7 @@ async function classesScreen(notice = '') {
     : null;
 
   show(
-    h('div', { class: 'head' }, h('div', {}, h('h1', { text: owner ? 'All classes' : 'Your classes' }), state.me?.name ? h('p', { class: 'stamp', text: `Signed in as ${state.me.name}` }) : null), h('div', { class: 'actions' }, h('button', { class: 'ghost', text: 'Sign out', onclick: signOut }))),
+    h('div', { class: 'head' }, h('div', {}, h('h1', { text: owner ? 'All classes' : 'Your classes' }), state.me?.name ? h('p', { class: 'stamp', text: `Signed in as ${state.me.name}` }) : null), h('div', { class: 'actions' }, owner ? h('a', { class: 'button ghost', href: '/admin/prospects/', text: 'Sales targets' }) : null, h('button', { class: 'ghost', text: 'Sign out', onclick: signOut }))),
     notice ? h('div', { class: 'notice', role: 'status' }, h('p', { text: notice })) : null,
     h('section', { class: 'panel', 'aria-labelledby': 'c-h' }, h('h2', { id: 'c-h', text: 'Classes' }), classes.length ? h('div', { class: 'tablewrap' }, h('table', { class: 'plain' }, h('thead', {}, h('tr', {}, h('th', { text: 'Name' }), h('th', { text: 'Code' }), h('th', { text: 'Students' }), h('th', { text: 'Status' }), owner ? h('th', { text: 'Teacher' }) : null, h('th', { text: '' }))), h('tbody', {}, rows))) : h('p', { class: 'empty', text: 'No classes yet. Create one below and share its code with your students.' })),
     h('section', { class: 'panel', 'aria-labelledby': 'n-h' }, h('h2', { id: 'n-h', text: 'Create a class' }), h('p', { class: 'muted', text: 'Runway Rally makes a code students type to join, like K7QM-4XPA. Only codes made here work.' }), make),

@@ -62,6 +62,8 @@ const save = (k, v) => {
   }
 };
 
+const yr = () => state.st?.assessmentSchoolYear || '';
+const yrPrev = () => state.st?.previousAssessmentSchoolYear || 'earlier';
 const fmt = (n) => (n === null || n === undefined ? '' : Number(n).toLocaleString('en-US'));
 const pct = (n) => (n === null || n === undefined ? '' : `${n}%`);
 function mathClass(m) {
@@ -156,11 +158,11 @@ function downloadCsv() {
   const esc = (v) => (v === null || v === undefined ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   let lines;
   if (state.view === 'districts') {
-    lines = [['District', 'NCES ID', 'City', 'Type', 'Phone', 'Students', 'Schools', 'Schools with grades 6-8', 'Math % proficient (6-8)', 'Rank from lowest']];
-    for (const d of districtsList()) lines.push([d.name, d.id, d.city, d.agency, d.phone, d.enrollment, d.schools, d.middleSchools, d.math, d.mathRank]);
+    lines = [['District', 'NCES ID', 'City', 'Type', 'Phone', 'Students', 'Schools', 'Schools with grades 6-8', `Math % proficient 6-8 ${yr()}`, 'Students tested', `Math % proficient 6-8 ${yrPrev()}`, 'Rank from lowest']];
+    for (const d of districtsList()) lines.push([d.name, d.id, d.city, d.agency, d.phone, d.enrollment, d.schools, d.middleSchools, d.math, d.mathTested, d.mathPrevious, d.mathRank]);
   } else {
-    lines = [['School', 'NCES ID', 'District', 'City', 'Grades', 'Students', 'Title I', 'Charter', 'Free or reduced lunch %', 'Phone', 'Math % proficient (6-8)', 'Rank from lowest']];
-    for (const s of schoolsList()) lines.push([s.name, s.id, districtName(s.district), s.city, s.grades, s.enrollment, s.titleI ? 'yes' : 'no', s.charter ? 'yes' : 'no', s.lowIncomePct, s.phone, s.math, s.mathRank]);
+    lines = [['School', 'NCES ID', 'District', 'City', 'Grades', 'Students', 'Title I', 'Charter', 'Free or reduced lunch %', 'Phone', `Math % proficient 6-8 ${yr()}`, 'Students tested', `Math % proficient 6-8 ${yrPrev()}`, 'Rank from lowest']];
+    for (const s of schoolsList()) lines.push([s.name, s.id, districtName(s.district), s.city, s.grades, s.enrollment, s.titleI ? 'yes' : 'no', s.charter ? 'yes' : 'no', s.lowIncomePct, s.phone, s.math, s.mathTested, s.mathPrevious, s.mathRank]);
   }
   const blob = new Blob([lines.map((l) => l.map(esc).join(',')).join('\n') + '\n'], { type: 'text/csv' });
   const a = h('a', { href: URL.createObjectURL(blob), download: `runway-rally-${st.code}-${state.view}.csv` });
@@ -241,6 +243,7 @@ function districtsTable() {
       h('td', { class: 'num', text: fmt(d.middleSchools) }),
       h('td', { class: 'num', text: fmt(d.enrollment) }),
       h('td', { class: mathClass(d.math), text: pct(d.math) }),
+      h('td', { class: 'num', text: pct(d.mathPrevious) }),
       h('td', { class: 'num', text: d.mathRank ? `${d.mathRank} of ${state.st.districtsScored}` : '' }),
       h('td', { class: 'rowactions' },
         h('button', { class: 'small', text: isOpen ? 'Hide schools' : 'Schools', 'aria-expanded': String(isOpen), onclick: () => { isOpen ? state.open.delete(d.id) : state.open.add(d.id); render(); } }),
@@ -248,12 +251,12 @@ function districtsTable() {
     ));
     if (isOpen) {
       const schools = schoolsList(d.id);
-      if (!schools.length) rows.push(h('tr', { class: 'school' }, h('td', { colspan: 8, text: state.middleOnly ? 'No schools with grades 6 to 8.' : 'No schools listed.' })));
+      if (!schools.length) rows.push(h('tr', { class: 'school' }, h('td', { colspan: 9, text: state.middleOnly ? 'No schools with grades 6 to 8.' : 'No schools listed.' })));
       for (const s of schools) rows.push(schoolRow(s, d, false));
     }
   }
   return { list, table: h('table', { class: 'plain' },
-    h('thead', {}, h('tr', {}, ['District', 'City', 'Type', 'Schools 6-8', 'Students', 'Math 6-8', 'Rank from lowest', ''].map((t) => h('th', { text: t })))),
+    h('thead', {}, h('tr', {}, ['District', 'City', 'Type', 'Schools 6-8', 'Students', `Math ${yr()}`, `Math ${yrPrev()}`, 'Rank from lowest', ''].map((t) => h('th', { text: t })))),
     h('tbody', {}, rows)) };
 }
 
@@ -265,6 +268,7 @@ function schoolRow(s, d, showDistrict) {
     h('td', { class: 'num', text: s.titleI ? 'Title I' : '' }),
     h('td', { class: 'num', text: fmt(s.enrollment) }),
     h('td', { class: mathClass(s.math), text: pct(s.math) }),
+    h('td', { class: 'num', text: pct(s.mathPrevious) }),
     h('td', { class: 'num', text: s.lowIncomePct !== null ? `${s.lowIncomePct}% low income` : '' }),
     h('td', { class: 'rowactions' }, h('button', { class: 'small primary', text: 'Pitch', onclick: () => choose(d, s) })),
   );
@@ -274,7 +278,7 @@ function schoolsTable() {
   const list = schoolsList();
   const map = districtById();
   return { list, table: h('table', { class: 'plain' },
-    h('thead', {}, h('tr', {}, ['School', 'District', 'Grades', 'Title I', 'Students', 'Math 6-8', 'Low income', ''].map((t) => h('th', { text: t })))),
+    h('thead', {}, h('tr', {}, ['School', 'District', 'Grades', 'Title I', 'Students', `Math ${yr()}`, `Math ${yrPrev()}`, 'Low income', ''].map((t) => h('th', { text: t })))),
     h('tbody', {}, list.slice(0, state.shown).map((s) => schoolRow(s, map.get(s.district) || { id: s.district, name: '' }, true)))) };
 }
 
@@ -299,7 +303,7 @@ function render() {
       h('div', { class: 'stat' }, h('div', { class: 'n', text: fmt(st.districts.length) }), h('div', { class: 'l', text: 'districts' })),
       h('div', { class: 'stat' }, h('div', { class: 'n', text: fmt(st.schools.filter((s) => s.middle).length) }), h('div', { class: 'l', text: 'schools with grades 6 to 8' })),
       h('div', { class: 'stat' }, h('div', { class: 'n', text: fmt(st.schools.length) }), h('div', { class: 'l', text: 'schools in all' })),
-      h('div', { class: 'stat' }, h('div', { class: 'n', text: sMath !== undefined && sMath !== null ? `${sMath}%` : 'n/a' }), h('div', { class: 'l', text: `proficient in math, grades 6 to 8${st.assessmentSchoolYear ? `, ${st.assessmentSchoolYear}` : ''}` }))));
+      h('div', { class: 'stat' }, h('div', { class: 'n', text: sMath !== undefined && sMath !== null ? `${sMath}%` : 'n/a' }), h('div', { class: 'l', text: `proficient in math, grades 6 to 8${st.assessmentSchoolYear ? `, ${st.assessmentSchoolYear}` : ''}${st.previousStateMath ? ` (${st.previousStateMath.pct}% in ${st.previousAssessmentSchoolYear})` : ''}` }))));
     parts.push(h('section', { class: 'panel facts' },
       h('h2', { text: `${st.name}'s math standards` }),
       h('p', {}, h('strong', { text: st.standards })),
@@ -335,7 +339,7 @@ function render() {
         h('label', { class: 'toggle' }, below, 'Below state average'),
         h('button', { class: 'small', text: 'Download CSV', onclick: downloadCsv })),
       h('div', { class: 'legend' }, h('span', { class: 'l1', text: '10+ points below the state' }), h('span', { class: 'l2', text: 'below the state' }), h('span', { class: 'l3', text: 'at or above the state' })),
-      h('p', { class: 'muted', text: `${fmt(list.length)} ${state.view} shown${list.length > state.shown ? `, first ${fmt(state.shown)} drawn` : ''}. Math is the share of grade 6 to 8 students proficient on the state test. Blank means the state did not report it, often because the group was small.` }),
+      h('p', { class: 'muted', text: `${fmt(list.length)} ${state.view} shown${list.length > state.shown ? `, first ${fmt(state.shown)} drawn` : ''}. Math is the share of grade 6 to 8 students proficient on the state test, the newest year the federal data has. Fewer students tested in ${yr()} in many places because of the pandemic, so ${yrPrev()} is shown next to it. Blank means the state did not report it, often because the group was small.` }),
       list.length ? h('div', { class: 'tablewrap' }, table) : h('p', { class: 'empty', text: 'Nothing matches.' }),
       list.length > state.shown ? h('button', { text: `Show ${fmt(Math.min(PAGE * 5, list.length - state.shown))} more`, onclick: () => { state.shown += PAGE * 5; render(); } }) : null));
   } else if (st && !st.available) {

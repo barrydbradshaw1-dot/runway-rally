@@ -179,7 +179,9 @@ api/src/server.js     HTTP API + static files, rate limiting, security headers
 api/src/store.js      memory and Postgres storage
 api/db/schema.sql     tables (student state as JSONB for the pilot)
 web/                  student PWA (no build step)
-web/admin/            teacher console
+web/admin/            teacher console (web/admin/prospects/: owner's sales targets)
+api/src/prospects.js  sales targets: district and school data, pitch writer; states.js has the standards
+api/tools/            build-school-data.mjs, the data builder for sales targets
 web/progress/         read-only family progress page
 mobile/               iPhone and Android apps (Capacitor), see mobile/README.md
 scripts/              droplet setup, deploy, backup, restore test
@@ -248,6 +250,22 @@ All sounds are made in code with Web Audio (`web/sound.js`): no sound files, not
 | `GET`, `POST /api/admin/teachers` | owner | list or add teachers |
 | `POST /api/admin/teachers/:id/key`, `DELETE /api/admin/teachers/:id` | owner | new key, or remove |
 | `GET /api/admin/audit` | owner | the last 200 audit entries |
+| `GET /api/admin/prospects/states`, `GET /api/admin/prospects/state/:ST` | owner | sales targets: states, and one state's districts and schools |
+| `POST /api/admin/prospects/pitch` `{state, district, school?, price?, sender?, recipient?}` | owner | write a pitch email and proposal |
+
+## Sales targets (owner only)
+
+`/admin/prospects/` is for the server owner, not for schools. The owner's console links to it as **Sales targets**; teachers and students get a 403. Pick a state and it lists every public school district and school, with:
+
+- how many schools serve grades 6 to 8, enrollment, Title I, and the share of students on free or reduced-price lunch;
+- the share of grade 6 to 8 students proficient in math on the state test, for the newest year the federal data has and the year before, colored against the state average, with a rank counting from the lowest;
+- search, sorting (lowest math first by default), "grades 6 to 8 only" and "below state average" filters, and a CSV download.
+
+**Pitch** on a district or school writes a short email and a longer proposal. They name the state's math standards (`api/src/states.js`), list the grade 6 to 8 skills (with Common Core codes in Common Core states and Georgia codes in Georgia), quote the math results, name the state's student privacy law where `states.js` has one, and add your price line if you give one. Nothing is sent from the page: copy what you want. Check the standards name and privacy law on the state's site before sending, since states revise them.
+
+**The data** lives in `api/data/schools/` (one JSON file per state) and ships inside the Docker image, so the page makes no outside calls. It comes from the NCES Common Core of Data directory and EDFacts state assessment results, through the Urban Institute's free Education Data Portal API. Refresh it about once a year: on GitHub open **Actions > School data > Run workflow** (optionally with state codes like `GA FL`), which commits new files; then merge and deploy. Or run `node api/tools/build-school-data.mjs` (all states, about half an hour) or `node api/tools/build-school-data.mjs GA FL` on any machine with Node 20+.
+
+As of Nov 2026 the API's newest math results are 2020-21, when fewer students tested in many places, so 2018-19 is shown next to them. Newer state results exist on state and federal sites but are not in the API yet; when they are, the builder picks them up on its own.
 
 ## Data retention
 
